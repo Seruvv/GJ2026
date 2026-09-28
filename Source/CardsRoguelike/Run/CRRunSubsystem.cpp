@@ -1,4 +1,4 @@
-#include "CRRunSubsystem.h"
+﻿#include "CRRunSubsystem.h"
 
 #include "../Combat/CRCardLibrary.h"
 #include "../Event/CREventDefinition.h"
@@ -325,6 +325,7 @@ bool UCRRunSubsystem::ChoiceNeedsCardSelection(const FCREventChoice& Choice)
 FString UCRRunSubsystem::GetEventChoiceBlockReason(const FCREventChoice& Choice) const
 {
 	// Validate the whole choice up front so it either commits completely or not at all.
+	// Reasons are shown to the player on the disabled choice, so they are in Russian.
 	int32 HPDelta = 0;
 	int32 ResourceDelta[3] = { 0, 0, 0 };
 	int32 Sacrifices = 0;
@@ -341,13 +342,13 @@ FString UCRRunSubsystem::GetEventChoiceBlockReason(const FCREventChoice& Choice)
 		case ECREventEffectType::AddRandomCard:
 			if (CRCardLibrary::GetAllCardIds().Num() == 0)
 			{
-				return TEXT("No cards available");
+				return TEXT("Нет доступных карт");
 			}
 			break;
 		case ECREventEffectType::AddSpecificCard:
 			if (!CRCardLibrary::FindCard(Effect.CardId))
 			{
-				return FString::Printf(TEXT("Unknown card '%s'"), *Effect.CardId.ToString());
+				return FString::Printf(TEXT("Неизвестная карта: %s"), *Effect.CardId.ToString());
 			}
 			break;
 		case ECREventEffectType::RemoveSelectedCard:
@@ -362,20 +363,20 @@ FString UCRRunSubsystem::GetEventChoiceBlockReason(const FCREventChoice& Choice)
 		const int32 Delta = ResourceDelta[static_cast<int32>(Resource)];
 		if (Delta < 0 && CarriedResource(Carried, Resource) + Delta < 0)
 		{
-			return FString::Printf(TEXT("Need %d %s"), -Delta, *CREvent::ResourceName(Resource));
+			return CREvent::NeedResourceText(Resource, -Delta);
 		}
 	}
 	if (Sacrifices > 1)
 	{
-		return TEXT("Only one card can be sacrificed");
+		return TEXT("Можно пожертвовать только одной картой");
 	}
 	if (Sacrifices == 1 && RunState.DeckCardIds.Num() == 0)
 	{
-		return TEXT("No card to sacrifice");
+		return TEXT("Нет карты, которой можно пожертвовать");
 	}
 	if (WouldEventChoiceBeLethal(RunState.Hamster.CurrentHP, HPDelta))
 	{
-		return TEXT("Would be lethal");
+		return TEXT("Этот выбор окажется смертельным");
 	}
 	return FString();
 }
@@ -396,7 +397,9 @@ bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinit
 		return false;
 	}
 
+	// Lines: player-facing (Russian) result summary. LogParts: the same facts in English for the log.
 	TArray<FString> Lines;
+	TArray<FString> LogParts;
 	FCRHamsterRunData& Hamster = RunState.Hamster;
 	FCRCarriedLoot& Carried = RunState.Carried;
 
@@ -405,7 +408,8 @@ bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinit
 	{
 		State->SacrificedCardId = RunState.DeckCardIds[SacrificeDeckIndex];
 		RunState.DeckCardIds.RemoveAt(SacrificeDeckIndex);
-		Lines.Add(FString::Printf(TEXT("Card sacrificed: %s"), *EventCardName(State->SacrificedCardId)));
+		Lines.Add(FString::Printf(TEXT("Потеряна карта: %s"), *EventCardName(State->SacrificedCardId)));
+		LogParts.Add(FString::Printf(TEXT("sacrificed %s"), *State->SacrificedCardId.ToString()));
 	}
 
 	for (const FCREventEffect& Effect : Choice.Effects)
@@ -418,12 +422,14 @@ bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinit
 			// temporary guard in validation instead (see WouldEventChoiceBeLethal).
 			const int32 Before = Hamster.CurrentHP;
 			Hamster.CurrentHP = FMath::Max(0, FMath::Min(Hamster.MaxHP, Hamster.CurrentHP + Effect.Amount));
-			Lines.Add(FString::Printf(TEXT("HP %s"), *CREvent::SignedAmount(Hamster.CurrentHP - Before)));
+			Lines.Add(FString::Printf(TEXT("Здоровье %s"), *CREvent::SignedAmount(Hamster.CurrentHP - Before)));
+			LogParts.Add(FString::Printf(TEXT("HP %s"), *CREvent::SignedAmount(Hamster.CurrentHP - Before)));
 			break;
 		}
 		case ECREventEffectType::ModifyResource:
 			CarriedResource(Carried, Effect.Resource) += Effect.Amount;
-			Lines.Add(FString::Printf(TEXT("%s %s"), *CREvent::ResourceName(Effect.Resource), *CREvent::SignedAmount(Effect.Amount)));
+			Lines.Add(FString::Printf(TEXT("%s %s"), *CREvent::ResourceDisplayName(Effect.Resource), *CREvent::SignedAmount(Effect.Amount)));
+			LogParts.Add(FString::Printf(TEXT("%s %s"), *CREvent::ResourceName(Effect.Resource), *CREvent::SignedAmount(Effect.Amount)));
 			break;
 		case ECREventEffectType::AddRandomCard:
 		{
@@ -431,13 +437,15 @@ bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinit
 			const FName CardId = CardIds[FMath::RandRange(0, CardIds.Num() - 1)];
 			RunState.DeckCardIds.Add(CardId);
 			State->GainedCardIds.Add(CardId);
-			Lines.Add(FString::Printf(TEXT("Card gained: %s"), *EventCardName(CardId)));
+			Lines.Add(FString::Printf(TEXT("Получена карта: %s"), *EventCardName(CardId)));
+			LogParts.Add(FString::Printf(TEXT("gained %s (random)"), *CardId.ToString()));
 			break;
 		}
 		case ECREventEffectType::AddSpecificCard:
 			RunState.DeckCardIds.Add(Effect.CardId);
 			State->GainedCardIds.Add(Effect.CardId);
-			Lines.Add(FString::Printf(TEXT("Card gained: %s"), *EventCardName(Effect.CardId)));
+			Lines.Add(FString::Printf(TEXT("Получена карта: %s"), *EventCardName(Effect.CardId)));
+			LogParts.Add(FString::Printf(TEXT("gained %s"), *Effect.CardId.ToString()));
 			break;
 		case ECREventEffectType::RemoveSelectedCard:
 			break;
@@ -448,7 +456,7 @@ bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinit
 	State->ResultLines = Lines;
 	State->bEffectsCommitted = true;
 	UE_LOG(LogCRRun, Log, TEXT("Event %s (%s): choice %d committed [%s] -> HP %d/%d, Silver %d, Food %d, Wood %d, deck %d"),
-		*EventNodeId.ToString(), *Event->EventId.ToString(), ChoiceIndex + 1, *FString::Join(Lines, TEXT("; ")),
+		*EventNodeId.ToString(), *Event->EventId.ToString(), ChoiceIndex + 1, *FString::Join(LogParts, TEXT("; ")),
 		Hamster.CurrentHP, Hamster.MaxHP, Carried.Silver, Carried.Food, Carried.Wood, RunState.DeckCardIds.Num());
 	OnRunStateChanged.Broadcast();
 	return true;

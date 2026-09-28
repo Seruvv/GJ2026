@@ -1,4 +1,4 @@
-#include "CREventHUD.h"
+﻿#include "CREventHUD.h"
 
 #include "../Combat/CRCardLibrary.h"
 #include "../Run/CRRunTypes.h"
@@ -30,7 +30,7 @@ namespace
 	// Effect summary lines are colored by sign so gains and losses read at a glance.
 	FLinearColor ResultLineColor(const FString& Line)
 	{
-		if (Line.Contains(TEXT(" -")) || Line.StartsWith(TEXT("Card sacrificed")))
+		if (Line.Contains(TEXT(" -")) || Line.StartsWith(TEXT("Потеряна карта")))
 		{
 			return EventHudBadColor;
 		}
@@ -47,7 +47,8 @@ float ACREventHUD::LineHeight(float Scale) const
 {
 	float W = 0.f;
 	float H = 0.f;
-	const_cast<ACREventHUD*>(this)->GetTextSize(TEXT("Ag"), W, H, GetFont(), Scale);
+	// Includes tall Cyrillic glyphs (Й) and descenders so lines never overlap.
+	const_cast<ACREventHUD*>(this)->GetTextSize(TEXT("AgЙу"), W, H, GetFont(), Scale);
 	return H * 1.18f;
 }
 
@@ -157,11 +158,13 @@ float ACREventHUD::DrawScrollRegion(const TArray<FTextLine>& Lines, const FBox2D
 		const float HintScale = 0.95f * S;
 		if (ScrollOffset > 0.f)
 		{
-			DrawTextAt(TEXT("^ more above"), EventHudDimTextColor, Region.Max.X - TextWidth(TEXT("^ more above"), HintScale), Region.Min.Y - 22.f * S, HintScale);
+			const FString Above = TEXT("^ выше есть ещё текст");
+			DrawTextAt(Above, EventHudDimTextColor, Region.Max.X - TextWidth(Above, HintScale), Region.Min.Y - 22.f * S, HintScale);
 		}
 		if (ScrollOffset < Overflow)
 		{
-			DrawTextAt(TEXT("v more (mouse wheel)"), EventHudDimTextColor, Region.Max.X - TextWidth(TEXT("v more (mouse wheel)"), HintScale), Region.Max.Y + 2.f * S, HintScale);
+			const FString Below = TEXT("v дальше — колесо мыши");
+			DrawTextAt(Below, EventHudDimTextColor, Region.Max.X - TextWidth(Below, HintScale), Region.Max.Y + 2.f * S, HintScale);
 		}
 	}
 	return Overflow;
@@ -206,7 +209,7 @@ void ACREventHUD::DrawHUD()
 		// Direct sandbox open (or broken data): show the room, nothing is interactive, no run data touched.
 		const float CenterX = Canvas->ClipX * 0.5f;
 		DrawBox(FBox2D(FVector2D(CenterX - 320.f * S, 40.f * S), FVector2D(CenterX + 320.f * S, 150.f * S)), EventHudPanelColor);
-		DrawTextCentered(TEXT("EVENT SANDBOX"), EventHudTitleColor, CenterX, 56.f * S, 2.f * S);
+		DrawTextCentered(TEXT("СОБЫТИЕ: ТЕСТОВАЯ КАРТА"), EventHudTitleColor, CenterX, 56.f * S, 2.f * S);
 		DrawTextCentered(GM->GetInvalidReason(), EventHudDimTextColor, CenterX, 104.f * S, 1.3f * S);
 		return;
 	}
@@ -309,7 +312,7 @@ void ACREventHUD::DrawCardSelectScreen(const ACREventGameMode* GM, const FBox2D&
 	const float Width = Content.GetSize().X;
 
 	float Y = Content.Min.Y;
-	for (const FString& Line : WrapText(TEXT("CHOOSE A CARD TO SACRIFICE"), EventHudTitleScale * S, Width))
+	for (const FString& Line : WrapText(TEXT("ВЫБЕРИТЕ КАРТУ, КОТОРОЙ ПРИДЁТСЯ ПОЖЕРТВОВАТЬ"), EventHudTitleScale * S, Width))
 	{
 		DrawTextAt(Line, EventHudTitleColor, Content.Min.X, Y, EventHudTitleScale * S);
 		Y += LineHeight(EventHudTitleScale * S);
@@ -323,7 +326,7 @@ void ACREventHUD::DrawCardSelectScreen(const ACREventGameMode* GM, const FBox2D&
 			Y += LineHeight(EventHudSmallScale * S);
 		}
 	}
-	DrawTextAt(TEXT("Click a card. Nothing happens until you pick one."), EventHudDimTextColor, Content.Min.X, Y + 4.f * S, 1.0f * S);
+	DrawTextAt(TEXT("Нажмите на карту. Пока карта не выбрана, ничего не произойдёт."), EventHudDimTextColor, Content.Min.X, Y + 4.f * S, 1.0f * S);
 	Y += LineHeight(1.0f * S) + 22.f * S;
 
 	// BACK (bottom-left) returns to the choices; nothing has been committed yet.
@@ -332,7 +335,7 @@ void ACREventHUD::DrawCardSelectScreen(const ACREventGameMode* GM, const FBox2D&
 	AddHit(BackRect, ECREventHitKind::Back);
 	DrawBox(BackRect, bBackHot ? EventHudButtonHotColor : EventHudButtonColor);
 	DrawFrame(BackRect, bBackHot ? FLinearColor::White : FLinearColor(0.45f, 0.45f, 0.5f), 2.f * S);
-	DrawTextCentered(TEXT("BACK"), EventHudTextColor, BackRect.GetCenter().X, BackRect.Min.Y + 8.f * S, 1.3f * S);
+	DrawTextCentered(TEXT("НАЗАД"), EventHudTextColor, BackRect.GetCenter().X, BackRect.Min.Y + 8.f * S, 1.3f * S);
 	DrawTextCentered(TEXT("Backspace"), EventHudDimTextColor, BackRect.GetCenter().X, BackRect.Min.Y + 34.f * S, 0.85f * S);
 
 	// Every deck entry as its own card (duplicates separately), in a wrapped grid that scrolls if needed.
@@ -380,7 +383,7 @@ void ACREventHUD::DrawCardSelectScreen(const ACREventGameMode* GM, const FBox2D&
 	}
 	if (Overflow > 0.f && ScrollOffset < Overflow)
 	{
-		DrawTextAt(TEXT("v more cards (mouse wheel)"), EventHudDimTextColor, GridRegion.Min.X, GridRegion.Max.Y + 2.f * S, 0.95f * S);
+		DrawTextAt(TEXT("v ещё карты — колесо мыши"), EventHudDimTextColor, GridRegion.Min.X, GridRegion.Max.Y + 2.f * S, 0.95f * S);
 	}
 }
 
@@ -391,7 +394,7 @@ void ACREventHUD::DrawResultScreen(const ACREventGameMode* GM, const FBox2D& Con
 	const float Width = Content.GetSize().X;
 
 	float Y = Content.Min.Y;
-	DrawTextAt(TEXT("RESULT"), EventHudTitleColor, Content.Min.X, Y, EventHudTitleScale * S);
+	DrawTextAt(TEXT("РЕЗУЛЬТАТ"), EventHudTitleColor, Content.Min.X, Y, EventHudTitleScale * S);
 	Y += LineHeight(EventHudTitleScale * S);
 	DrawTextAt(Event->Title.ToString(), EventHudDimTextColor, Content.Min.X, Y, EventHudSmallScale * S);
 	Y += LineHeight(EventHudSmallScale * S) + 6.f * S;
@@ -405,8 +408,8 @@ void ACREventHUD::DrawResultScreen(const ACREventGameMode* GM, const FBox2D& Con
 	AddHit(ContinueRect, ECREventHitKind::Continue);
 	DrawBox(ContinueRect, bActive ? (bHot ? FLinearColor(0.5f, 0.36f, 0.14f, 0.97f) : FLinearColor(0.38f, 0.26f, 0.1f, 0.95f)) : EventHudDisabledColor);
 	DrawFrame(ContinueRect, bHot ? FLinearColor::White : FLinearColor(0.9f, 0.7f, 0.4f), 3.f * S);
-	DrawTextCentered(TEXT("CONTINUE"), EventHudTextColor, ContinueRect.GetCenter().X, ContinueRect.Min.Y + 10.f * S, 1.6f * S);
-	DrawTextCentered(TEXT("Return to map  (Space)"), EventHudDimTextColor, ContinueRect.GetCenter().X, ContinueRect.Min.Y + 46.f * S, 0.9f * S);
+	DrawTextCentered(TEXT("ПРОДОЛЖИТЬ"), EventHudTextColor, ContinueRect.GetCenter().X, ContinueRect.Min.Y + 10.f * S, 1.6f * S);
+	DrawTextCentered(TEXT("Вернуться на карту  (Пробел)"), EventHudDimTextColor, ContinueRect.GetCenter().X, ContinueRect.Min.Y + 46.f * S, 0.9f * S);
 
 	// Result narrative, the actual consequences, then the event's closing line: one scrollable column.
 	TArray<FTextLine> Lines;
@@ -436,18 +439,20 @@ void ACREventHUD::DrawResultScreen(const ACREventGameMode* GM, const FBox2D& Con
 void ACREventHUD::DrawStatus(const ACREventGameMode* GM, float S)
 {
 	// Compact run status (top-right) so costs can be judged while reading.
-	const float W = 230.f * S;
+	const float W = 270.f * S;
 	const FVector2D Min(Canvas->ClipX - W - 28.f * S, 28.f * S);
-	DrawBox(FBox2D(Min, Min + FVector2D(W, 146.f * S)), EventHudPanelColor);
+	DrawBox(FBox2D(Min, Min + FVector2D(W, 178.f * S)), EventHudPanelColor);
 	float Y = Min.Y + 10.f * S;
 	const float X = Min.X + 14.f * S;
-	DrawTextAt(FString::Printf(TEXT("HP      %d / %d"), GM->GetHP(), GM->GetMaxHP()), EventHudTextColor, X, Y, 1.2f * S);
+	DrawTextAt(FString::Printf(TEXT("Здоровье: %d / %d"), GM->GetHP(), GM->GetMaxHP()), EventHudTextColor, X, Y, 1.2f * S);
 	Y += 32.f * S;
-	DrawTextAt(FString::Printf(TEXT("Silver  %d"), GM->GetSilver()), FLinearColor(0.85f, 0.88f, 0.95f), X, Y, 1.2f * S);
+	DrawTextAt(FString::Printf(TEXT("Серебро: %d"), GM->GetSilver()), FLinearColor(0.85f, 0.88f, 0.95f), X, Y, 1.2f * S);
 	Y += 32.f * S;
-	DrawTextAt(FString::Printf(TEXT("Food    %d"), GM->GetFood()), FLinearColor(0.95f, 0.75f, 0.4f), X, Y, 1.2f * S);
+	DrawTextAt(FString::Printf(TEXT("Еда: %d"), GM->GetFood()), FLinearColor(0.95f, 0.75f, 0.4f), X, Y, 1.2f * S);
 	Y += 32.f * S;
-	DrawTextAt(FString::Printf(TEXT("Wood    %d   Deck %d"), GM->GetWood(), GM->GetDeck().Num()), FLinearColor(0.75f, 0.55f, 0.35f), X, Y, 1.2f * S);
+	DrawTextAt(FString::Printf(TEXT("Дерево: %d"), GM->GetWood()), FLinearColor(0.75f, 0.55f, 0.35f), X, Y, 1.2f * S);
+	Y += 32.f * S;
+	DrawTextAt(FString::Printf(TEXT("Колода: %d"), GM->GetDeck().Num()), EventHudDimTextColor, X, Y, 1.2f * S);
 }
 
 FCREventHit ACREventHUD::HitTest(const FVector2D& ScreenPos) const

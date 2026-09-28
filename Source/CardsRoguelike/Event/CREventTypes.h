@@ -102,7 +102,14 @@ struct FCREventPoolEntry
 
 namespace CREvent
 {
+	/** Internal English name (logs). */
 	FString ResourceName(ECREventResource Resource);
+
+	/** Player-facing (Russian) resource name, e.g. "Серебро". */
+	FString ResourceDisplayName(ECREventResource Resource);
+
+	/** Player-facing (Russian) shortage reason, e.g. "Нужно серебра: 2". */
+	FString NeedResourceText(ECREventResource Resource, int32 Amount);
 
 	/** Short signed label, e.g. "+3" / "-2". */
 	FString SignedAmount(int32 Amount);

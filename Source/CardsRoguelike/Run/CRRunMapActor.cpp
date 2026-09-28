@@ -1,4 +1,4 @@
-#include "CRRunMapActor.h"
+﻿#include "CRRunMapActor.h"
 
 #include "../Combat/CRTypes.h"
 #include "Camera/CameraComponent.h"
@@ -219,7 +219,7 @@ void ACRRunMapActor::RebuildMap()
 	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Event)
 	{
 		// The event's own result screen already listed the consequences.
-		ArrivalTitle = TEXT("EVENT RESOLVED");
+		ArrivalTitle = TEXT("СОБЫТИЕ ЗАВЕРШЕНО");
 	}
 
 	Marker->SetVisibility(true);
@@ -348,7 +348,7 @@ void ACRRunMapActor::OnMarkerArrived()
 	}
 	else if (Run && Run->IsInEventRoom())
 	{
-		ArrivalSubtitle = TEXT("Something waits on the road...");
+		ArrivalSubtitle = TEXT("На дороге что-то ждёт...");
 		PendingRoomMap = CRRun::EventMapPath();
 	}
 	else

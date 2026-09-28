@@ -1,4 +1,4 @@
-#include "CREventGameMode.h"
+﻿#include "CREventGameMode.h"
 
 #include "../Run/CRRunSubsystem.h"
 #include "CREventDefinition.h"
@@ -41,7 +41,7 @@ void ACREventGameMode::StartPlay()
 	UCRRunSubsystem* Run = GetRun();
 	if (!Run || !Run->IsInEventRoom())
 	{
-		InvalidReason = TEXT("No active Event room");
+		InvalidReason = TEXT("Нет активной комнаты события");
 		UE_LOG(LogCREvent, Log, TEXT("Event sandbox opened without an active event room"));
 		SetupPresentation();
 		return;
@@ -52,7 +52,7 @@ void ACREventGameMode::StartPlay()
 	Event = State ? State->SelectedEvent.LoadSynchronous() : nullptr;
 	if (!Event)
 	{
-		InvalidReason = TEXT("Event data missing (check the node's Event Pool)");
+		InvalidReason = TEXT("Данные события не найдены (проверьте пул событий узла)");
 		UE_LOG(LogCREvent, Warning, TEXT("Event room %s: could not load an event definition"), *EventNodeId.ToString());
 		SetupPresentation();
 		return;
@@ -131,6 +131,7 @@ void ACREventGameMode::ChooseOption(int32 ChoiceIndex)
 	const FString Reason = GetChoiceBlockReason(ChoiceIndex);
 	if (!Reason.IsEmpty())
 	{
+		UE_LOG(LogCREvent, Log, TEXT("Choice %d is disabled"), ChoiceIndex + 1);
 		ShowMessage(Reason);
 		return;
 	}
@@ -145,7 +146,8 @@ void ACREventGameMode::ChooseOption(int32 ChoiceIndex)
 	UCRRunSubsystem* Run = GetRun();
 	if (!Run || !Run->CommitEventChoice(EventNodeId, Event, ChoiceIndex, INDEX_NONE))
 	{
-		ShowMessage(TEXT("That choice is not possible right now"));
+		UE_LOG(LogCREvent, Warning, TEXT("Choice %d could not be committed"), ChoiceIndex + 1);
+		ShowMessage(TEXT("Сейчас этот выбор невозможен"));
 	}
 }
 
@@ -163,7 +165,8 @@ void ACREventGameMode::SelectSacrifice(int32 DeckIndex)
 	}
 	else
 	{
-		ShowMessage(TEXT("That card cannot be sacrificed"));
+		UE_LOG(LogCREvent, Warning, TEXT("Sacrifice of deck card %d could not be committed"), DeckIndex);
+		ShowMessage(TEXT("Эту карту нельзя пожертвовать"));
 	}
 }
 
@@ -232,9 +235,9 @@ int32 ACREventGameMode::GetWood() const
 
 void ACREventGameMode::ShowMessage(const FString& InMessage)
 {
+	// Player-facing (Russian) toast; callers log their own English line.
 	Message = InMessage;
 	MessageTime = GetWorld()->GetRealTimeSeconds();
-	UE_LOG(LogCREvent, Log, TEXT("%s"), *InMessage);
 }
 
 FString ACREventGameMode::GetActiveMessage() const

@@ -13,8 +13,9 @@ namespace
 	// is -X: standing at +X puts the scene on the right of the screen, beside the narrative panel.
 	const FVector EventStageCenter(0.f, 300.f, 0.f);
 	const float EventStageHalfWidth = 900.f;
-	const FVector EventCameraLocation(330.f, -420.f, 250.f);
-	const FRotator EventCameraRotation(-14.f, 90.f, 0.f);
+	// Far and level enough that the tallest scene (the door and its lintel, ~4 m) fits in frame.
+	const FVector EventCameraLocation(400.f, -620.f, 260.f);
+	const FRotator EventCameraRotation(-7.f, 90.f, 0.f);
 }
 
 ACREventRoomActor::ACREventRoomActor()
