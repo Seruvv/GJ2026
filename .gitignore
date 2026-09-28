@@ -1,0 +1,42 @@
+# Unreal Engine project - generated and machine-local files
+
+# Build outputs, caches and editor-generated data
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Cooker file-open-order logs written during packaging
+Build/*/FileOpenOrder/
+
+# Plugin build outputs (for any project plugins added later)
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.sln
+*.slnx
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.user
+
+# Packaged standalone builds (kept outside the repo, but guard against copies)
+/StandaloneBuilds/
+/Windows/
+/WindowsNoEditor/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
+
+# Claude Code per-user local settings (shared project config stays tracked)
+.claude/settings.local.json

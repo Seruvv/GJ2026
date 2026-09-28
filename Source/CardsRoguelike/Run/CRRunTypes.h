@@ -1,0 +1,150 @@
+// Persistent run data types. Plain data only: no actor references, so the state survives map changes.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "CRRunTypes.generated.h"
+
+UENUM(BlueprintType)
+enum class ECRRoomType : uint8
+{
+	Start,
+	Combat,
+	Shop,
+	Event,
+	Boss,
+	Return
+};
+
+/** Distinguishes "no run yet" from "a run that ended", so a failed run is not silently replaced. */
+UENUM(BlueprintType)
+enum class ECRRunStatus : uint8
+{
+	NotStarted,
+	Active,
+	Failed,
+	Completed
+};
+
+UENUM(BlueprintType)
+enum class ECRRunNodeState : uint8
+{
+	Locked,
+	Available,
+	Current,
+	Completed
+};
+
+/** One room on the run map. Connections are directed: they list the legal next rooms. */
+USTRUCT(BlueprintType)
+struct FCRRunNodeData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	FName NodeId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	ECRRoomType RoomType = ECRRoomType::Combat;
+
+	/** Position on the 3D run map (visualization only). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	FVector Position = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	TArray<FName> ConnectedNodeIds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	ECRRunNodeState State = ECRRunNodeState::Locked;
+};
+
+USTRUCT(BlueprintType)
+struct FCRHamsterRunData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	FString Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 CurrentHP = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 MaxHP = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 ManaPerTurn = 0;
+};
+
+/** Everything the hamster is carrying back toward the Bottle during this run. */
+USTRUCT(BlueprintType)
+struct FCRCarriedLoot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 Silver = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 Food = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 Wood = 0;
+
+	/** Cards found this run (not yet part of the deck). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	TArray<FName> CardIds;
+
+	/** Artifacts found this run (not yet equipped). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	TArray<FName> ArtifactIds;
+};
+
+USTRUCT(BlueprintType)
+struct FCRRunState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	ECRRunStatus Status = ECRRunStatus::NotStarted;
+
+	/**
+	 * Whether the room at CurrentNodeId has been resolved (e.g. its combat won).
+	 * Outgoing rooms only become Available once the current room is resolved.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	bool bCurrentRoomResolved = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FCRHamsterRunData Hamster;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FName CurrentNodeId;
+
+	/** Rooms entered this run, in order; the last entry is the current room. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> VisitedNodeIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> DeckCardIds;
+
+	/** Equipped artifacts (no behavior yet). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> ArtifactIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FCRCarriedLoot Carried;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FCRRunNodeData> Nodes;
+};
+
+namespace CRRun
+{
+	FString RoomTypeName(ECRRoomType Type);
+	FLinearColor RoomTypeColor(ECRRoomType Type);
+
+	/** Prototype maps used by the run loop. */
+	inline const TCHAR* RunMapPath() { return TEXT("/Game/Dev/TestMaps/LV_RunMapSandbox"); }
+	inline const TCHAR* CombatMapPath() { return TEXT("/Game/Dev/TestMaps/LV_CombatSandbox"); }
+}
