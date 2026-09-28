@@ -216,6 +216,11 @@ void ACRRunMapActor::RebuildMap()
 	{
 		ArrivalTitle = TEXT("LEFT THE SHOP");
 	}
+	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Event)
+	{
+		// The event's own result screen already listed the consequences.
+		ArrivalTitle = TEXT("EVENT RESOLVED");
+	}
 
 	Marker->SetVisibility(true);
 	Marker->SetWorldLocation(GetMarkerRestLocation(DisplayedNodeId));
@@ -340,6 +345,11 @@ void ACRRunMapActor::OnMarkerArrived()
 	{
 		ArrivalSubtitle = TEXT("Entering shop...");
 		PendingRoomMap = CRRun::ShopMapPath();
+	}
+	else if (Run && Run->IsInEventRoom())
+	{
+		ArrivalSubtitle = TEXT("Something waits on the road...");
+		PendingRoomMap = CRRun::EventMapPath();
 	}
 	else
 	{
