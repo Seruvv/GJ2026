@@ -16,11 +16,20 @@ ACRRunNodeActor::ACRRunNodeActor()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderFinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 
-	// Pedestal: 200 cm wide, 40 cm tall, top surface at the actor origin. Blocks Visibility for mouse picking.
+	// Pedestal: 200 cm wide, 40 cm tall, top surface at the actor origin. Visual only: it lifts on hover.
 	Pedestal = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Pedestal"));
 	Pedestal->SetupAttachment(SceneRoot);
 	Pedestal->SetStaticMesh(CylinderFinder.Object);
-	Pedestal->SetCollisionProfileName(TEXT("BlockAll"));
+	Pedestal->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Mouse picking uses this hidden copy of the resting pedestal. It never moves, so the hover lift
+	// cannot pull the pick shape out from under the cursor (which made edge hover flicker on and off).
+	HitArea = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HitArea"));
+	HitArea->SetupAttachment(SceneRoot);
+	HitArea->SetStaticMesh(CylinderFinder.Object);
+	HitArea->SetCollisionProfileName(TEXT("BlockAll"));
+	HitArea->SetHiddenInGame(true);
+	HitArea->SetCastShadow(false);
 
 	// Halo: flat disc under the pedestal rim, shown for Available / Current / hover.
 	Halo = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Halo"));
@@ -45,6 +54,8 @@ void ACRRunNodeActor::InitNode(FName InNodeId, ECRRoomType InRoomType)
 
 	Pedestal->SetRelativeScale3D(FVector(2.f * PedestalScale, 2.f * PedestalScale, 0.4f));
 	Pedestal->SetRelativeLocation(FVector(0.f, 0.f, -20.f));
+	HitArea->SetRelativeScale3D(Pedestal->GetRelativeScale3D());
+	HitArea->SetRelativeLocation(FVector(0.f, 0.f, -20.f));
 	Halo->SetRelativeScale3D(FVector(2.6f * PedestalScale, 2.6f * PedestalScale, 0.04f));
 	Halo->SetRelativeLocation(FVector(0.f, 0.f, -36.f));
 	SetVisualState(ECRRunNodeState::Locked, false);
