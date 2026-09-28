@@ -212,6 +212,10 @@ void ACRRunMapActor::RebuildMap()
 	{
 		ArrivalTitle = TEXT("COMBAT CLEARED");
 	}
+	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Shop)
+	{
+		ArrivalTitle = TEXT("LEFT THE SHOP");
+	}
 
 	Marker->SetVisibility(true);
 	Marker->SetWorldLocation(GetMarkerRestLocation(DisplayedNodeId));
@@ -325,22 +329,36 @@ void ACRRunMapActor::OnMarkerArrived()
 	const FCRRunNodeData* Node = Run ? Run->GetCurrentNode() : nullptr;
 	ArrivalTitle = Node ? FString::Printf(TEXT("%s ROOM"), *CRRun::RoomTypeName(Node->RoomType)) : FString();
 
+	// Run state already points at the unresolved room; the room's map reads it on load.
+	PendingRoomMap.Reset();
 	if (Run && Run->IsInCombatRoom())
 	{
-		// Run state already points at the unresolved combat room; the combat map reads it on load.
 		ArrivalSubtitle = TEXT("Entering combat...");
-		GetWorldTimerManager().SetTimer(EnterCombatTimer, this, &ACRRunMapActor::OpenCombatMap, FMath::Max(EnterCombatDelay, 0.01f), false);
+		PendingRoomMap = CRRun::CombatMapPath();
+	}
+	else if (Run && Run->IsInShopRoom())
+	{
+		ArrivalSubtitle = TEXT("Entering shop...");
+		PendingRoomMap = CRRun::ShopMapPath();
 	}
 	else
 	{
 		ArrivalSubtitle = TEXT("Placeholder room - no gameplay yet");
 	}
+
+	if (!PendingRoomMap.IsEmpty())
+	{
+		GetWorldTimerManager().SetTimer(EnterCombatTimer, this, &ACRRunMapActor::OpenRoomMap, FMath::Max(EnterCombatDelay, 0.01f), false);
+	}
 	RefreshVisuals();
 }
 
-void ACRRunMapActor::OpenCombatMap()
+void ACRRunMapActor::OpenRoomMap()
 {
-	UGameplayStatics::OpenLevel(this, FName(CRRun::CombatMapPath()));
+	if (!PendingRoomMap.IsEmpty())
+	{
+		UGameplayStatics::OpenLevel(this, FName(*PendingRoomMap));
+	}
 }
 
 void ACRRunMapActor::Tick(float DeltaSeconds)

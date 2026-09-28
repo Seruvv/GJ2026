@@ -11,9 +11,9 @@
 
 namespace
 {
-	const FLinearColor PanelColor(0.02f, 0.02f, 0.03f, 0.72f);
-	const FLinearColor TextColor(0.92f, 0.92f, 0.95f);
-	const FLinearColor DimTextColor(0.55f, 0.55f, 0.6f);
+	const FLinearColor RunHudPanelColor(0.02f, 0.02f, 0.03f, 0.72f);
+	const FLinearColor RunHudTextColor(0.92f, 0.92f, 0.95f);
+	const FLinearColor RunHudDimTextColor(0.55f, 0.55f, 0.6f);
 }
 
 void ACRRunMapHUD::DrawHUD()
@@ -32,7 +32,7 @@ void ACRRunMapHUD::DrawHUD()
 
 	if (!Run->HasRun())
 	{
-		DrawTextCentered(TEXT("No active run  (R to start the test run)"), TextColor, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.45f, 1.6f * S);
+		DrawTextCentered(TEXT("No active run  (R to start the test run)"), RunHudTextColor, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.45f, 1.6f * S);
 		return;
 	}
 	const bool bFailed = State.Status == ECRRunStatus::Failed;
@@ -45,11 +45,11 @@ void ACRRunMapHUD::DrawHUD()
 	DrawPanel(X - 12.f * S, Y - 10.f * S, 330.f * S, 150.f * S);
 	DrawTextAt(bFailed ? TEXT("RUN FAILED") : TEXT("RUN"), bFailed ? FLinearColor(1.f, 0.3f, 0.25f) : FLinearColor(0.45f, 1.f, 0.55f), X, Y, 2.0f * S);
 	Y += 44.f * S;
-	DrawTextAt(FString::Printf(TEXT("Hamster: %s"), *State.Hamster.Name), TextColor, X, Y, 1.25f * S);
+	DrawTextAt(FString::Printf(TEXT("Hamster: %s"), *State.Hamster.Name), RunHudTextColor, X, Y, 1.25f * S);
 	Y += 30.f * S;
-	DrawTextAt(FString::Printf(TEXT("HP: %d / %d"), State.Hamster.CurrentHP, State.Hamster.MaxHP), TextColor, X, Y, 1.25f * S);
+	DrawTextAt(FString::Printf(TEXT("HP: %d / %d"), State.Hamster.CurrentHP, State.Hamster.MaxHP), RunHudTextColor, X, Y, 1.25f * S);
 	Y += 30.f * S;
-	DrawTextAt(FString::Printf(TEXT("Current room: %s"), *RoomName), TextColor, X, Y, 1.25f * S);
+	DrawTextAt(FString::Printf(TEXT("Current room: %s"), *RoomName), RunHudTextColor, X, Y, 1.25f * S);
 
 	// Top right: currencies carried this run.
 	const float W = 220.f * S;
@@ -71,20 +71,20 @@ void ACRRunMapHUD::DrawHUD()
 	{
 		DrawPanel(CenterX - 300.f * S, BannerY - 14.f * S, 600.f * S, 110.f * S);
 		DrawTextCentered(TEXT("RUN FAILED"), FLinearColor(1.f, 0.3f, 0.25f), CenterX, BannerY, 2.2f * S);
-		DrawTextCentered(FString::Printf(TEXT("%s fell in %s"), *State.Hamster.Name, *RoomName), DimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
+		DrawTextCentered(FString::Printf(TEXT("%s fell in %s"), *State.Hamster.Name, *RoomName), RunHudDimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
 	}
 	else if (Map && !Map->GetArrivalTitle().IsEmpty())
 	{
 		DrawPanel(CenterX - 300.f * S, BannerY - 14.f * S, 600.f * S, 110.f * S);
 		DrawTextCentered(Map->GetArrivalTitle(), FLinearColor(1.f, 0.85f, 0.35f), CenterX, BannerY, 2.2f * S);
-		DrawTextCentered(Map->GetArrivalSubtitle(), DimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
+		DrawTextCentered(Map->GetArrivalSubtitle(), RunHudDimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
 	}
 
 	// Bottom hint.
 	const bool bFinished = Current && Current->ConnectedNodeIds.Num() == 0;
 	const TCHAR* Hint = bFailed ? TEXT("Press R to start a new prototype run")
 		: (bFinished ? TEXT("End of the route  -  R restarts the test run") : TEXT("Click a highlighted room to travel"));
-	DrawTextCentered(Hint, bFailed ? TextColor : DimTextColor, CenterX, Canvas->ClipY - 50.f * S, 1.2f * S);
+	DrawTextCentered(Hint, bFailed ? RunHudTextColor : RunHudDimTextColor, CenterX, Canvas->ClipY - 50.f * S, 1.2f * S);
 
 	const ACRRunMapPlayerController* PC = Cast<ACRRunMapPlayerController>(GetOwningPlayerController());
 	if (PC && PC->IsDebugView())
@@ -94,22 +94,22 @@ void ACRRunMapHUD::DrawHUD()
 		DrawTextAt(TEXT("DEBUG VIEW  (F10)   R restart test run"), FLinearColor(1.f, 0.4f, 1.f), X, Y, 1.1f * S);
 		Y += 26.f * S;
 		DrawTextAt(FString::Printf(TEXT("Current node: %s   resolved: %s   status: %s"), *State.CurrentNodeId.ToString(),
-			State.bCurrentRoomResolved ? TEXT("yes") : TEXT("no"), *UEnum::GetDisplayValueAsText(State.Status).ToString()), TextColor, X, Y, 1.0f * S);
+			State.bCurrentRoomResolved ? TEXT("yes") : TEXT("no"), *UEnum::GetDisplayValueAsText(State.Status).ToString()), RunHudTextColor, X, Y, 1.0f * S);
 		Y += 22.f * S;
 		FString Path;
 		for (const FName Id : State.VisitedNodeIds)
 		{
 			Path += (Path.IsEmpty() ? TEXT("") : TEXT(" > ")) + Id.ToString();
 		}
-		DrawTextAt(FString::Printf(TEXT("Path: %s"), *Path), TextColor, X, Y, 1.0f * S);
+		DrawTextAt(FString::Printf(TEXT("Path: %s"), *Path), RunHudTextColor, X, Y, 1.0f * S);
 		Y += 22.f * S;
-		DrawTextAt(FString::Printf(TEXT("Deck: %d cards   Artifacts: %d"), State.DeckCardIds.Num(), State.ArtifactIds.Num()), TextColor, X, Y, 1.0f * S);
+		DrawTextAt(FString::Printf(TEXT("Deck: %d cards   Artifacts: %d"), State.DeckCardIds.Num(), State.ArtifactIds.Num()), RunHudTextColor, X, Y, 1.0f * S);
 	}
 }
 
 void ACRRunMapHUD::DrawPanel(float X, float Y, float W, float H)
 {
-	DrawRect(PanelColor, X, Y, W, H);
+	DrawRect(RunHudPanelColor, X, Y, W, H);
 }
 
 void ACRRunMapHUD::DrawTextAt(const FString& Text, const FLinearColor& Color, float X, float Y, float Scale)

@@ -1,6 +1,7 @@
 #include "CRCombatGameMode.h"
 
 #include "CRArena.h"
+#include "CRCardLibrary.h"
 #include "CRBarrel.h"
 #include "CRDebugHUD.h"
 #include "CREnemy.h"
@@ -26,36 +27,8 @@ ACRCombatGameMode::ACRCombatGameMode()
 	PlayerControllerClass = ACRPlayerController::StaticClass();
 	HUDClass = ACRDebugHUD::StaticClass();
 
-	auto MakeCard = [](const TCHAR* Name, int32 Cost, ECRCardEffect Effect, ECRCardTargeting Targeting,
-		float Strength, int32 Damage, float Radius, int32 Amount, bool bPhysical)
-	{
-		FCRCardDef Card;
-		Card.Name = Name;
-		Card.ManaCost = Cost;
-		Card.Effect = Effect;
-		Card.Targeting = Targeting;
-		Card.Strength = Strength;
-		Card.Damage = Damage;
-		Card.Radius = Radius;
-		Card.Amount = Amount;
-		Card.bIsPhysical = bPhysical;
-		return Card;
-	};
-
-	Cards = {
-		MakeCard(TEXT("PUSH"),  1, ECRCardEffect::Push,  ECRCardTargeting::PhysicsTargetThenPoint, 1500.f, 0, 0.f,   0, true),
-		MakeCard(TEXT("BLAST"), 2, ECRCardEffect::Blast, ECRCardTargeting::GroundPoint,            1200.f, 3, 400.f, 0, true),
-		MakeCard(TEXT("PULL"),  1, ECRCardEffect::Pull,  ECRCardTargeting::PhysicsTarget,          1300.f, 0, 0.f,   0, true),
-		MakeCard(TEXT("GUARD"), 1, ECRCardEffect::Guard, ECRCardTargeting::None,                   0.f,    0, 0.f,   5, false),
-		MakeCard(TEXT("MEND"),  2, ECRCardEffect::Mend,  ECRCardTargeting::None,                   0.f,    0, 0.f,   6, false),
-	};
-	const TCHAR* ShortTexts[] = { TEXT("Push target"), TEXT("Area blast"), TEXT("Pull to center"), TEXT("Gain armor"), TEXT("Restore HP") };
-	const TCHAR* CardIds[] = { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") };
-	for (int32 i = 0; i < Cards.Num() && i < UE_ARRAY_COUNT(ShortTexts); ++i)
-	{
-		Cards[i].ShortText = ShortTexts[i];
-		Cards[i].Id = CardIds[i];
-	}
+	// Shared prototype catalog (also used by rewards and the shop).
+	Cards = CRCardLibrary::GetPrototypeCards();
 
 	MeleeStats.CombatType = ECRCombatType::Melee;
 	MeleeStats.MaxHP = 8;

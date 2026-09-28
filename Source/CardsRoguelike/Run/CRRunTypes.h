@@ -100,6 +100,30 @@ struct FCRCarriedLoot
 	TArray<FName> ArtifactIds;
 };
 
+/** Contents of one shop room, created on first visit and kept for the rest of the run. */
+USTRUCT(BlueprintType)
+struct FCRShopState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	bool bInitialized = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> OfferCardIds;
+
+	/** Parallel to OfferCardIds: true once that offer has been bought. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<bool> OfferPurchased;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	bool bHealPurchased = false;
+
+	/** Merchant placeholder line picked when the shop was created. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString MerchantLine;
+};
+
 USTRUCT(BlueprintType)
 struct FCRRunState
 {
@@ -137,6 +161,10 @@ struct FCRRunState
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
 	TArray<FCRRunNodeData> Nodes;
+
+	/** Shop contents per shop node id; offers never reroll within a run. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TMap<FName, FCRShopState> ShopStates;
 };
 
 namespace CRRun
@@ -147,4 +175,8 @@ namespace CRRun
 	/** Prototype maps used by the run loop. */
 	inline const TCHAR* RunMapPath() { return TEXT("/Game/Dev/TestMaps/LV_RunMapSandbox"); }
 	inline const TCHAR* CombatMapPath() { return TEXT("/Game/Dev/TestMaps/LV_CombatSandbox"); }
+	inline const TCHAR* ShopMapPath() { return TEXT("/Game/Dev/TestMaps/LV_ShopSandbox"); }
+
+	/** Generic placeholder merchant lines (setting-neutral until the jam theme is known). */
+	const TArray<FString>& MerchantLines();
 }

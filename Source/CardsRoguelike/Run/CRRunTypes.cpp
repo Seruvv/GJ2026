@@ -16,6 +16,19 @@ namespace CRRun
 		return TEXT("?");
 	}
 
+	const TArray<FString>& MerchantLines()
+	{
+		static const TArray<FString> Lines = {
+			TEXT("Take a look."),
+			TEXT("Spend wisely."),
+			TEXT("Everything has a price."),
+			TEXT("Need something?"),
+			TEXT("I've seen worse decks."),
+			TEXT("Don't take all day."),
+		};
+		return Lines;
+	}
+
 	FLinearColor RoomTypeColor(ECRRoomType Type)
 	{
 		switch (Type)

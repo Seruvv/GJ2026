@@ -65,7 +65,7 @@ private:
 	void PlaceCamera();
 	FVector GetMarkerRestLocation(FName NodeId) const;
 	void OnMarkerArrived();
-	void OpenCombatMap();
+	void OpenRoomMap();
 	UStaticMeshComponent* AddMeshComponent(UStaticMesh* Mesh, const FLinearColor& Color);
 
 	UCRRunSubsystem* GetRunSubsystem() const;
@@ -99,7 +99,9 @@ private:
 	FName HoveredNodeId;
 	FString ArrivalTitle;
 	FString ArrivalSubtitle;
+	/** Short pause on the arrival banner before loading a combat or shop map. */
 	FTimerHandle EnterCombatTimer;
+	FString PendingRoomMap;
 
 	bool bMarkerMoving = false;
 	float MarkerAlpha = 0.f;
