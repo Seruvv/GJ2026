@@ -37,6 +37,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "CR|RunMap")
 	TObjectPtr<UStaticMeshComponent> Pedestal;
 
+	/** Hidden, non-animated pick shape matching the resting pedestal (mouse hover/click). */
+	UPROPERTY(VisibleAnywhere, Category = "CR|RunMap")
+	TObjectPtr<UStaticMeshComponent> HitArea;
+
 	UPROPERTY(VisibleAnywhere, Category = "CR|RunMap")
 	TObjectPtr<UStaticMeshComponent> Halo;
 
