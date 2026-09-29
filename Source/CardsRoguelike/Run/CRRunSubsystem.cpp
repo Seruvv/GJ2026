@@ -1,6 +1,8 @@
-#include "CRRunSubsystem.h"
+﻿#include "CRRunSubsystem.h"
 
 #include "../Combat/CRCardLibrary.h"
+#include "../Event/CREventDefinition.h"
+#include "../Event/CREventPool.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCRRun, Log, All);
 
@@ -15,7 +17,6 @@ void UCRRunSubsystem::StartPrototypeRun()
 	RunState.Hamster.ManaPerTurn = 3;
 
 	RunState.DeckCardIds = { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") };
-
 	BuildPrototypeGraph();
 	// Start needs no resolving: its first rooms are open immediately.
 	RunState.CurrentNodeId = TEXT("Start");
@@ -62,6 +63,8 @@ void UCRRunSubsystem::BuildPrototypeGraph()
 	// CombatA -> ShopA (M2.4) opens the economy test route: Combat -> Reward -> Shop -> Combat.
 	AddNode(TEXT("CombatA"), ECRRoomType::Combat, FVector(750.f,  -550.f, 80.f),  { TEXT("CombatC"), TEXT("ShopA") });
 	AddNode(TEXT("EventA"),  ECRRoomType::Event,  FVector(750.f,  450.f,  0.f),   { TEXT("CombatC"), TEXT("ShopA") });
+	// Event nodes name the pool they draw from; a generated map can assign regional or rare pools here.
+	RunState.Nodes.Last().EventPool = TSoftObjectPtr<UCREventPool>(FSoftObjectPath(CRRun::DefaultEventPoolPath()));
 	AddNode(TEXT("CombatC"), ECRRoomType::Combat, FVector(1600.f, -350.f, 140.f), { TEXT("Boss") });
 	AddNode(TEXT("ShopA"),   ECRRoomType::Shop,   FVector(1350.f, 950.f,  20.f),  { TEXT("CombatB") });
 	AddNode(TEXT("CombatB"), ECRRoomType::Combat, FVector(2050.f, 700.f,  60.f),  { TEXT("Boss") });
@@ -129,9 +132,9 @@ bool UCRRunSubsystem::EnterNode(FName NodeId)
 	UE_LOG(LogCRRun, Log, TEXT("Entered %s (%s)"), *NodeId.ToString(), Node ? *CRRun::RoomTypeName(Node->RoomType) : TEXT("?"));
 	OnRunStateChanged.Broadcast();
 
-	// Combat and Shop rooms resolve through their own maps. Rooms without gameplay yet
-	// (Event, Boss, Return) are placeholders that resolve on arrival so the graph stays traversable.
-	if (Node && Node->RoomType != ECRRoomType::Combat && Node->RoomType != ECRRoomType::Shop)
+	// Combat, Shop and Event rooms resolve through their own maps. Rooms without gameplay yet
+	// (Boss, Return) are placeholders that resolve on arrival so the graph stays traversable.
+	if (Node && Node->RoomType != ECRRoomType::Combat && Node->RoomType != ECRRoomType::Shop && Node->RoomType != ECRRoomType::Event)
 	{
 		CompleteCurrentRoom();
 	}
@@ -233,6 +236,240 @@ bool UCRRunSubsystem::BuyShopHeal(FName ShopNodeId, int32 SilverPrice, int32 Hea
 		Before, Hamster.CurrentHP, SilverPrice, RunState.Carried.Silver);
 	OnRunStateChanged.Broadcast();
 	return true;
+}
+
+namespace
+{
+	FString EventCardName(FName CardId)
+	{
+		const FCRCardDef* Card = CRCardLibrary::FindCard(CardId);
+		return Card ? Card->Name : CardId.ToString();
+	}
+
+	int32& CarriedResource(FCRCarriedLoot& Carried, ECREventResource Resource)
+	{
+		switch (Resource)
+		{
+		case ECREventResource::Food: return Carried.Food;
+		case ECREventResource::Wood: return Carried.Wood;
+		default:                     return Carried.Silver;
+		}
+	}
+}
+
+bool UCRRunSubsystem::IsInEventRoom() const
+{
+	const FCRRunNodeData* Current = GetCurrentNode();
+	return IsRunActive() && !RunState.bCurrentRoomResolved && Current && Current->RoomType == ECRRoomType::Event;
+}
+
+const FCREventNodeState* UCRRunSubsystem::FindEventState(FName EventNodeId) const
+{
+	return RunState.EventStates.Find(EventNodeId);
+}
+
+const FCREventNodeState* UCRRunSubsystem::EnsureEventState(FName EventNodeId)
+{
+	const FCRRunNodeData* Node = FindNode(EventNodeId);
+	if (!IsRunActive() || !Node || Node->RoomType != ECRRoomType::Event)
+	{
+		return nullptr;
+	}
+
+	if (const FCREventNodeState* Existing = RunState.EventStates.Find(EventNodeId); Existing && Existing->bInitialized)
+	{
+		return Existing;
+	}
+
+	// First visit: draw one event from the node's pool. The pick is stored and never rerolled.
+	const TSoftObjectPtr<UCREventPool> PoolRef = Node->EventPool.IsNull()
+		? TSoftObjectPtr<UCREventPool>(FSoftObjectPath(CRRun::DefaultEventPoolPath())) : Node->EventPool;
+	const UCREventPool* Pool = PoolRef.LoadSynchronous();
+	const TSoftObjectPtr<UCREventDefinition> Picked = Pool ? Pool->PickEvent() : nullptr;
+	if (Picked.IsNull())
+	{
+		UE_LOG(LogCRRun, Warning, TEXT("Event %s: no event could be drawn from pool %s"), *EventNodeId.ToString(), *PoolRef.ToString());
+		return nullptr;
+	}
+
+	FCREventNodeState& State = RunState.EventStates.FindOrAdd(EventNodeId);
+	State = FCREventNodeState();
+	State.SelectedEvent = Picked;
+	State.bInitialized = true;
+	UE_LOG(LogCRRun, Log, TEXT("Event %s: drew %s from pool %s"), *EventNodeId.ToString(), *Picked.ToString(), *PoolRef.ToString());
+	OnRunStateChanged.Broadcast();
+	return &State;
+}
+
+FCREventNodeState* UCRRunSubsystem::GetActiveEventState(FName EventNodeId)
+{
+	// Choices only happen inside the event room the hamster is currently standing in.
+	if (!IsInEventRoom() || RunState.CurrentNodeId != EventNodeId)
+	{
+		return nullptr;
+	}
+	FCREventNodeState* State = RunState.EventStates.Find(EventNodeId);
+	return State && State->bInitialized ? State : nullptr;
+}
+
+bool UCRRunSubsystem::WouldEventChoiceBeLethal(int32 CurrentHP, int32 HPDelta)
+{
+	return HPDelta < 0 && CurrentHP + HPDelta <= 0;
+}
+
+bool UCRRunSubsystem::ChoiceNeedsCardSelection(const FCREventChoice& Choice)
+{
+	return Choice.Effects.ContainsByPredicate([](const FCREventEffect& Effect) { return Effect.Type == ECREventEffectType::RemoveSelectedCard; });
+}
+
+FString UCRRunSubsystem::GetEventChoiceBlockReason(const FCREventChoice& Choice) const
+{
+	// Validate the whole choice up front so it either commits completely or not at all.
+	// Reasons are shown to the player on the disabled choice, so they are in Russian.
+	int32 HPDelta = 0;
+	int32 ResourceDelta[3] = { 0, 0, 0 };
+	int32 Sacrifices = 0;
+	for (const FCREventEffect& Effect : Choice.Effects)
+	{
+		switch (Effect.Type)
+		{
+		case ECREventEffectType::ModifyHP:
+			HPDelta += Effect.Amount;
+			break;
+		case ECREventEffectType::ModifyResource:
+			ResourceDelta[static_cast<int32>(Effect.Resource)] += Effect.Amount;
+			break;
+		case ECREventEffectType::AddRandomCard:
+			if (CRCardLibrary::GetAllCardIds().Num() == 0)
+			{
+				return TEXT("Нет доступных карт");
+			}
+			break;
+		case ECREventEffectType::AddSpecificCard:
+			if (!CRCardLibrary::FindCard(Effect.CardId))
+			{
+				return FString::Printf(TEXT("Неизвестная карта: %s"), *Effect.CardId.ToString());
+			}
+			break;
+		case ECREventEffectType::RemoveSelectedCard:
+			++Sacrifices;
+			break;
+		}
+	}
+
+	FCRCarriedLoot Carried = RunState.Carried;
+	for (const ECREventResource Resource : { ECREventResource::Silver, ECREventResource::Food, ECREventResource::Wood })
+	{
+		const int32 Delta = ResourceDelta[static_cast<int32>(Resource)];
+		if (Delta < 0 && CarriedResource(Carried, Resource) + Delta < 0)
+		{
+			return CREvent::NeedResourceText(Resource, -Delta);
+		}
+	}
+	if (Sacrifices > 1)
+	{
+		return TEXT("Можно пожертвовать только одной картой");
+	}
+	if (Sacrifices == 1 && RunState.DeckCardIds.Num() == 0)
+	{
+		return TEXT("Нет карты, которой можно пожертвовать");
+	}
+	if (WouldEventChoiceBeLethal(RunState.Hamster.CurrentHP, HPDelta))
+	{
+		return TEXT("Этот выбор окажется смертельным");
+	}
+	return FString();
+}
+
+bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinition* Event, int32 ChoiceIndex, int32 SacrificeDeckIndex)
+{
+	FCREventNodeState* State = GetActiveEventState(EventNodeId);
+	if (!State || State->bEffectsCommitted || !Event || FSoftObjectPath(Event) != State->SelectedEvent.ToSoftObjectPath()
+		|| !Event->Choices.IsValidIndex(ChoiceIndex))
+	{
+		return false;
+	}
+
+	const FCREventChoice& Choice = Event->Choices[ChoiceIndex];
+	const bool bNeedsCard = ChoiceNeedsCardSelection(Choice);
+	if (!GetEventChoiceBlockReason(Choice).IsEmpty() || (bNeedsCard && !RunState.DeckCardIds.IsValidIndex(SacrificeDeckIndex)))
+	{
+		return false;
+	}
+
+	// Lines: player-facing (Russian) result summary. LogParts: the same facts in English for the log.
+	TArray<FString> Lines;
+	TArray<FString> LogParts;
+	FCRHamsterRunData& Hamster = RunState.Hamster;
+	FCRCarriedLoot& Carried = RunState.Carried;
+
+	// The sacrifice is the one effect that depends on player input; take exactly that deck entry.
+	if (bNeedsCard)
+	{
+		State->SacrificedCardId = RunState.DeckCardIds[SacrificeDeckIndex];
+		RunState.DeckCardIds.RemoveAt(SacrificeDeckIndex);
+		Lines.Add(FString::Printf(TEXT("Потеряна карта: %s"), *EventCardName(State->SacrificedCardId)));
+		LogParts.Add(FString::Printf(TEXT("sacrificed %s"), *State->SacrificedCardId.ToString()));
+	}
+
+	for (const FCREventEffect& Effect : Choice.Effects)
+	{
+		switch (Effect.Type)
+		{
+		case ECREventEffectType::ModifyHP:
+		{
+			// Healing caps at MaxHP. Damage is not clamped to 1: lethal outcomes are blocked by the
+			// temporary guard in validation instead (see WouldEventChoiceBeLethal).
+			const int32 Before = Hamster.CurrentHP;
+			Hamster.CurrentHP = FMath::Max(0, FMath::Min(Hamster.MaxHP, Hamster.CurrentHP + Effect.Amount));
+			Lines.Add(FString::Printf(TEXT("Здоровье %s"), *CREvent::SignedAmount(Hamster.CurrentHP - Before)));
+			LogParts.Add(FString::Printf(TEXT("HP %s"), *CREvent::SignedAmount(Hamster.CurrentHP - Before)));
+			break;
+		}
+		case ECREventEffectType::ModifyResource:
+			CarriedResource(Carried, Effect.Resource) += Effect.Amount;
+			Lines.Add(FString::Printf(TEXT("%s %s"), *CREvent::ResourceDisplayName(Effect.Resource), *CREvent::SignedAmount(Effect.Amount)));
+			LogParts.Add(FString::Printf(TEXT("%s %s"), *CREvent::ResourceName(Effect.Resource), *CREvent::SignedAmount(Effect.Amount)));
+			break;
+		case ECREventEffectType::AddRandomCard:
+		{
+			const TArray<FName> CardIds = CRCardLibrary::GetAllCardIds();
+			const FName CardId = CardIds[FMath::RandRange(0, CardIds.Num() - 1)];
+			RunState.DeckCardIds.Add(CardId);
+			State->GainedCardIds.Add(CardId);
+			Lines.Add(FString::Printf(TEXT("Получена карта: %s"), *EventCardName(CardId)));
+			LogParts.Add(FString::Printf(TEXT("gained %s (random)"), *CardId.ToString()));
+			break;
+		}
+		case ECREventEffectType::AddSpecificCard:
+			RunState.DeckCardIds.Add(Effect.CardId);
+			State->GainedCardIds.Add(Effect.CardId);
+			Lines.Add(FString::Printf(TEXT("Получена карта: %s"), *EventCardName(Effect.CardId)));
+			LogParts.Add(FString::Printf(TEXT("gained %s"), *Effect.CardId.ToString()));
+			break;
+		case ECREventEffectType::RemoveSelectedCard:
+			break;
+		}
+	}
+
+	State->SelectedChoiceIndex = ChoiceIndex;
+	State->ResultLines = Lines;
+	State->bEffectsCommitted = true;
+	UE_LOG(LogCRRun, Log, TEXT("Event %s (%s): choice %d committed [%s] -> HP %d/%d, Silver %d, Food %d, Wood %d, deck %d"),
+		*EventNodeId.ToString(), *Event->EventId.ToString(), ChoiceIndex + 1, *FString::Join(LogParts, TEXT("; ")),
+		Hamster.CurrentHP, Hamster.MaxHP, Carried.Silver, Carried.Food, Carried.Wood, RunState.DeckCardIds.Num());
+	OnRunStateChanged.Broadcast();
+	return true;
+}
+
+bool UCRRunSubsystem::ContinueFromEvent(FName EventNodeId)
+{
+	const FCREventNodeState* State = GetActiveEventState(EventNodeId);
+	if (!State || !State->bEffectsCommitted)
+	{
+		return false;
+	}
+	return CompleteCurrentRoom();
 }
 
 bool UCRRunSubsystem::CompleteCurrentRoom()

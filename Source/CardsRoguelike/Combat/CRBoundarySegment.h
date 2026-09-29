@@ -27,6 +27,8 @@ public:
 	ECRBoundaryType GetBoundaryType() const { return BoundaryType; }
 	FVector2D GetInwardNormal() const { return InwardNormal; }
 	int32 GetEdgeIndex() const { return EdgeIndex; }
+	/** World position of the edge's name label (just inside the edge, above the wall). */
+	FVector GetLabelWorldLocation() const;
 
 	/** Rubber reaction for a physics body that hit this wall. PreImpactVelocity is the body's velocity before the hit. */
 	void HandleBodyHit(UPrimitiveComponent* Body, const FVector& PreImpactVelocity);

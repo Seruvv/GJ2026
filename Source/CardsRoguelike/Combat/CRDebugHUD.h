@@ -44,12 +44,19 @@ private:
 	void DrawResultBanner(const ACRCombatGameMode* GM);
 	void DrawEndTurnButton(const ACRCombatGameMode* GM, const FVector2D& MousePos);
 	void DrawRewardPanel(const ACRCombatGameMode* GM, const FVector2D& MousePos);
+	/** Russian edge / pit names at their world positions (the 3D text font has no Cyrillic). */
+	void DrawArenaLabels(const ACRCombatGameMode* GM);
 
 	// Canvas helpers
 	void DrawBox(const FBox2D& Box, const FLinearColor& Fill);
 	void DrawFrame(const FBox2D& Box, const FLinearColor& Color, float Thickness);
 	void DrawTextAt(const FString& Text, const FLinearColor& Color, float X, float Y, float Scale);
 	void DrawTextCentered(const FString& Text, const FLinearColor& Color, float CenterX, float Y, float Scale);
+	/** Centered text shrunk (down to MinFactor) so it fits MaxWidth; long text wraps onto a second line. */
+	void DrawTextFitted(const FString& Text, const FLinearColor& Color, float CenterX, float Y, float Scale, float MaxWidth, float MinFactor = 0.7f);
+	/** Centered text with a dark drop shadow, for labels over the 3D arena. */
+	void DrawTextShadowCentered(const FString& Text, const FLinearColor& Color, float CenterX, float Y, float Scale);
+	float TextWidth(const FString& Text, float Scale);
 	void DrawWorldCircle(const FVector& Center, float Radius, const FLinearColor& Color, float Thickness);
 	void DrawWorldArrow(const FVector& From, const FVector& To, const FLinearColor& Color, float Thickness);
 	float UIScale() const;

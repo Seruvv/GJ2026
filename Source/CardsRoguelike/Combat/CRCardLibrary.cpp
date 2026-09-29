@@ -1,4 +1,4 @@
-#include "CRCardLibrary.h"
+﻿#include "CRCardLibrary.h"
 
 namespace
 {
@@ -25,13 +25,14 @@ namespace CRCardLibrary
 {
 	const TArray<FCRCardDef>& GetPrototypeCards()
 	{
-		// Values moved unchanged from the M2.3 CRCombatGameMode constructor.
+		// Gameplay values unchanged since M2.3. Id is the internal key (deck, saves, logs); Name and
+		// ShortText are the player-facing (Russian) display strings.
 		static const TArray<FCRCardDef> Cards = {
-			MakeCard(TEXT("Push"),  TEXT("PUSH"),  TEXT("Push target"),    1, ECRCardEffect::Push,  ECRCardTargeting::PhysicsTargetThenPoint, 1500.f, 0, 0.f,   0, true),
-			MakeCard(TEXT("Blast"), TEXT("BLAST"), TEXT("Area blast"),     2, ECRCardEffect::Blast, ECRCardTargeting::GroundPoint,            1200.f, 3, 400.f, 0, true),
-			MakeCard(TEXT("Pull"),  TEXT("PULL"),  TEXT("Pull to center"), 1, ECRCardEffect::Pull,  ECRCardTargeting::PhysicsTarget,          1300.f, 0, 0.f,   0, true),
-			MakeCard(TEXT("Guard"), TEXT("GUARD"), TEXT("Gain armor"),     1, ECRCardEffect::Guard, ECRCardTargeting::None,                   0.f,    0, 0.f,   5, false),
-			MakeCard(TEXT("Mend"),  TEXT("MEND"),  TEXT("Restore HP"),     2, ECRCardEffect::Mend,  ECRCardTargeting::None,                   0.f,    0, 0.f,   6, false),
+			MakeCard(TEXT("Push"),  TEXT("ТОЛЧОК"),      TEXT("Оттолкнуть цель"),       1, ECRCardEffect::Push,  ECRCardTargeting::PhysicsTargetThenPoint, 1500.f, 0, 0.f,   0, true),
+			MakeCard(TEXT("Blast"), TEXT("ВЗРЫВ"),       TEXT("Взрыв по области"),      2, ECRCardEffect::Blast, ECRCardTargeting::GroundPoint,            1200.f, 3, 400.f, 0, true),
+			MakeCard(TEXT("Pull"),  TEXT("ПРИТЯЖЕНИЕ"),  TEXT("Притянуть к центру"),    1, ECRCardEffect::Pull,  ECRCardTargeting::PhysicsTarget,          1300.f, 0, 0.f,   0, true),
+			MakeCard(TEXT("Guard"), TEXT("ЗАЩИТА"),      TEXT("Получить броню"),        1, ECRCardEffect::Guard, ECRCardTargeting::None,                   0.f,    0, 0.f,   5, false),
+			MakeCard(TEXT("Mend"),  TEXT("ЛЕЧЕНИЕ"),     TEXT("Восстановить здоровье"), 2, ECRCardEffect::Mend,  ECRCardTargeting::None,                   0.f,    0, 0.f,   6, false),
 		};
 		return Cards;
 	}

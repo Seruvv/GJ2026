@@ -40,6 +40,8 @@ private:
 	void DrawFrame(const FBox2D& Box, const FLinearColor& Color, float Thickness);
 	void DrawTextAt(const FString& Text, const FLinearColor& Color, float X, float Y, float Scale);
 	void DrawTextCentered(const FString& Text, const FLinearColor& Color, float CenterX, float Y, float Scale);
+	/** Scale at which Text fits MaxWidth (never larger than Scale). */
+	float FitScale(const FString& Text, float Scale, float MaxWidth) const;
 	static FString StatusLabel(ECRShopOfferStatus Status);
 
 	TArray<FBox2D> OfferRects;

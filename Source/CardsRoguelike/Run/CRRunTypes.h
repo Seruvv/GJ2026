@@ -3,7 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/SoftObjectPtr.h"
 #include "CRRunTypes.generated.h"
+
+class UCREventDefinition;
+class UCREventPool;
 
 UENUM(BlueprintType)
 enum class ECRRoomType : uint8
@@ -56,6 +60,10 @@ struct FCRRunNodeData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
 	ECRRunNodeState State = ECRRunNodeState::Locked;
+
+	/** Event rooms: the pool this node draws its event from (the default pool if unset). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	TSoftObjectPtr<UCREventPool> EventPool;
 };
 
 USTRUCT(BlueprintType)
@@ -124,6 +132,43 @@ struct FCRShopState
 	FString MerchantLine;
 };
 
+/**
+ * One event room's state, created on first visit and kept for the rest of the run. The event never
+ * rerolls, and once a choice is committed its result is replayed rather than re-applied.
+ */
+USTRUCT(BlueprintType)
+struct FCREventNodeState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	bool bInitialized = false;
+
+	/** Event drawn from the node's pool on first visit. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TSoftObjectPtr<UCREventDefinition> SelectedEvent;
+
+	/** Chosen option, or INDEX_NONE while undecided. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 SelectedChoiceIndex = INDEX_NONE;
+
+	/** True once the chosen option's effects were applied (never twice). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	bool bEffectsCommitted = false;
+
+	/** Card the player sacrificed for a RemoveSelectedCard effect, if any. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FName SacrificedCardId;
+
+	/** Cards gained by the committed option (random picks are fixed here). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> GainedCardIds;
+
+	/** Effect summary lines shown on the result screen ("HP -3", "Card gained: BLAST"). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FString> ResultLines;
+};
+
 USTRUCT(BlueprintType)
 struct FCRRunState
 {
@@ -165,6 +210,10 @@ struct FCRRunState
 	/** Shop contents per shop node id; offers never reroll within a run. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
 	TMap<FName, FCRShopState> ShopStates;
+
+	/** Event state per event node id; independent for every event room of the run. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TMap<FName, FCREventNodeState> EventStates;
 };
 
 namespace CRRun
@@ -176,6 +225,10 @@ namespace CRRun
 	inline const TCHAR* RunMapPath() { return TEXT("/Game/Dev/TestMaps/LV_RunMapSandbox"); }
 	inline const TCHAR* CombatMapPath() { return TEXT("/Game/Dev/TestMaps/LV_CombatSandbox"); }
 	inline const TCHAR* ShopMapPath() { return TEXT("/Game/Dev/TestMaps/LV_ShopSandbox"); }
+	inline const TCHAR* EventMapPath() { return TEXT("/Game/Dev/TestMaps/LV_EventSandbox"); }
+
+	/** Pool used by event nodes that do not name their own. */
+	inline const TCHAR* DefaultEventPoolPath() { return TEXT("/Game/Dev/Events/Pools/DA_EventPool_Default.DA_EventPool_Default"); }
 
 	/** Generic placeholder merchant lines (setting-neutral until the jam theme is known). */
 	const TArray<FString>& MerchantLines();

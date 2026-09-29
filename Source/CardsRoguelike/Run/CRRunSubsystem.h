@@ -7,6 +7,9 @@
 #include "CRRunTypes.h"
 #include "CRRunSubsystem.generated.h"
 
+class UCREventDefinition;
+struct FCREventChoice;
+
 DECLARE_MULTICAST_DELEGATE(FCROnRunStateChanged);
 
 UCLASS()
@@ -46,12 +49,37 @@ public:
 	/** Buys the shop's one heal: spends Silver, heals clamped to MaxHP, marks it sold. */
 	bool BuyShopHeal(FName ShopNodeId, int32 SilverPrice, int32 HealAmount);
 
+	// Events (state per event node, persistent for the run)
+
+	/** True while the hamster stands in an unresolved Event room of an active run. */
+	bool IsInEventRoom() const;
+
+	/** Draws the node's event from its pool on first call; later calls return the same state. Null if no event could be drawn. */
+	const FCREventNodeState* EnsureEventState(FName EventNodeId);
+	const FCREventNodeState* FindEventState(FName EventNodeId) const;
+
+	/** Why the choice cannot be taken right now ("Need 2 Silver"), or empty if it can. */
+	FString GetEventChoiceBlockReason(const FCREventChoice& Choice) const;
+
+	/** True if the choice needs the player to pick a deck card before it can commit. */
+	static bool ChoiceNeedsCardSelection(const FCREventChoice& Choice);
+
+	/**
+	 * Commits a choice of the current (unresolved) event: validates every effect, then applies all of
+	 * them exactly once and records the result. SacrificeDeckIndex selects the card for RemoveSelectedCard.
+	 * Returns false (changing nothing) if the event already committed or the choice is not payable.
+	 */
+	bool CommitEventChoice(FName EventNodeId, const UCREventDefinition* Event, int32 ChoiceIndex, int32 SacrificeDeckIndex);
+
+	/** Completes the current event room after its result was shown. Only valid once a choice is committed. */
+	bool ContinueFromEvent(FName EventNodeId);
+
 	/** Only Available nodes can be entered; there is no backtracking. */
 	bool CanTravelTo(FName NodeId) const;
 
 	/**
-	 * Moves the hamster into an Available room. Combat rooms stay unresolved until
-	 * CompleteCurrentRoom(); placeholder rooms (shop, event, boss, return) resolve immediately.
+	 * Moves the hamster into an Available room. Combat, Shop and Event rooms stay unresolved until
+	 * their map calls CompleteCurrentRoom(); placeholder rooms (boss, return) resolve immediately.
 	 */
 	bool EnterNode(FName NodeId);
 
@@ -78,6 +106,16 @@ private:
 
 	/** Mutable state of a shop the hamster is currently standing in (unresolved), or nullptr. */
 	FCRShopState* GetActiveShopState(FName ShopNodeId);
+
+	/** Mutable state of the event the hamster is currently standing in (unresolved, initialized), or nullptr. */
+	FCREventNodeState* GetActiveEventState(FName EventNodeId);
+
+	/**
+	 * TEMPORARY safety guard until the event-death (Graveyard) milestone: event choices that would bring
+	 * HP to 0 or below are disabled, because a lethal event result has no resolution flow yet. The data
+	 * model allows lethal effects; replace this guard with the death flow, do not turn it into a clamp.
+	 */
+	static bool WouldEventChoiceBeLethal(int32 CurrentHP, int32 HPDelta);
 
 	/** Read-only in the editor/MCP for debugging during PIE. */
 	UPROPERTY(VisibleInstanceOnly, Category = "CR|Run")

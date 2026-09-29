@@ -1,4 +1,4 @@
-#include "CRPit.h"
+﻿#include "CRPit.h"
 
 #include "CRBarrel.h"
 #include "CREnemy.h"
@@ -36,6 +36,8 @@ ACRPit::ACRPit()
 	Label->SetTextRenderColor(FColor(255, 80, 80));
 	Label->SetText(FText::FromString(TEXT("PIT")));
 	Label->SetWorldSize(45.f);
+	// The combat HUD draws the Russian "ЯМА" label at this spot (the 3D text font has no Cyrillic).
+	Label->SetVisibility(false);
 
 	for (int32 i = 0; i < 4; ++i)
 	{
@@ -84,6 +86,11 @@ void ACRPit::SetPitSize(const FVector2D& InSize)
 		Rim[i]->SetWorldLocation(FVector(Base.X, Base.Y, 2.f) + Offset);
 		Rim[i]->SetWorldScale3D(Scale);
 	}
+}
+
+FVector ACRPit::GetLabelWorldLocation() const
+{
+	return Label ? Label->GetComponentLocation() : GetActorLocation();
 }
 
 void ACRPit::Tick(float DeltaSeconds)

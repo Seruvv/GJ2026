@@ -90,13 +90,20 @@ void ACRBoundarySegment::ApplyVisuals()
 
 void ACRBoundarySegment::RefreshLabel()
 {
-	// Playtest View: short type name. Debug View adds the cycling key.
+	// Playtest View: the combat HUD draws the Russian edge name here (the 3D text font has no Cyrillic),
+	// so this label only shows in Debug View, with the cycling key.
+	Label->SetVisibility(bLabelShowsDebug);
 	const FString TypeName = CRProto::BoundaryTypeName(BoundaryType);
 	Label->SetText(FText::FromString(bLabelShowsDebug ? FString::Printf(TEXT("[%d] %s"), EdgeIndex + 7, *TypeName) : TypeName));
 	// Lightened so dark types (VOID) stay legible against the dark floor.
 	const FLinearColor LabelColor = FMath::Lerp(CRProto::BoundaryTypeColor(BoundaryType), FLinearColor::White, 0.35f);
 	Label->SetTextRenderColor(LabelColor.ToFColor(true));
 	Label->SetWorldLocation(FVector(FVector2D(GetActorLocation()) + InwardNormal * 110.f, WallHeight + 40.f));
+}
+
+FVector ACRBoundarySegment::GetLabelWorldLocation() const
+{
+	return Label ? Label->GetComponentLocation() : GetActorLocation();
 }
 
 void ACRBoundarySegment::Tick(float DeltaSeconds)

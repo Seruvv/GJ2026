@@ -1,4 +1,4 @@
-#include "CRRunMapActor.h"
+﻿#include "CRRunMapActor.h"
 
 #include "../Combat/CRTypes.h"
 #include "Camera/CameraComponent.h"
@@ -216,6 +216,11 @@ void ACRRunMapActor::RebuildMap()
 	{
 		ArrivalTitle = TEXT("LEFT THE SHOP");
 	}
+	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Event)
+	{
+		// The event's own result screen already listed the consequences.
+		ArrivalTitle = TEXT("СОБЫТИЕ ЗАВЕРШЕНО");
+	}
 
 	Marker->SetVisibility(true);
 	Marker->SetWorldLocation(GetMarkerRestLocation(DisplayedNodeId));
@@ -340,6 +345,11 @@ void ACRRunMapActor::OnMarkerArrived()
 	{
 		ArrivalSubtitle = TEXT("Entering shop...");
 		PendingRoomMap = CRRun::ShopMapPath();
+	}
+	else if (Run && Run->IsInEventRoom())
+	{
+		ArrivalSubtitle = TEXT("На дороге что-то ждёт...");
+		PendingRoomMap = CRRun::EventMapPath();
 	}
 	else
 	{

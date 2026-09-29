@@ -1,4 +1,4 @@
-#include "CRTypes.h"
+﻿#include "CRTypes.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "CRCombatGameMode.h"
@@ -73,6 +73,18 @@ namespace CRProto
 		case ECRBoundaryType::Rubber:        return TEXT("RUBBER");
 		case ECRBoundaryType::Void:          return TEXT("VOID");
 		case ECRBoundaryType::TeleportInner: return TEXT("TELEPORT");
+		}
+		return TEXT("?");
+	}
+
+	FString BoundaryTypeDisplayName(ECRBoundaryType Type)
+	{
+		switch (Type)
+		{
+		case ECRBoundaryType::Normal:        return TEXT("ОБЫЧНАЯ");
+		case ECRBoundaryType::Rubber:        return TEXT("ОТСКАКИВАЮЩАЯ");
+		case ECRBoundaryType::Void:          return TEXT("ПАДЕНИЕ ЗА КРАЙ");
+		case ECRBoundaryType::TeleportInner: return TEXT("ТЕЛЕПОРТ");
 		}
 		return TEXT("?");
 	}

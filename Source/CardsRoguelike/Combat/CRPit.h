@@ -22,6 +22,9 @@ public:
 
 	void SetPitSize(const FVector2D& InSize);
 
+	/** World position of the pit's name label (centre, slightly above the floor). */
+	FVector GetLabelWorldLocation() const;
+
 	/** The trigger is shrunk by this margin so a body has to be mostly inside. */
 	UPROPERTY(EditAnywhere, Category = "CR|Pit")
 	float TriggerInset = 40.f;

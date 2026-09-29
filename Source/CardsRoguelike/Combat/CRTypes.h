@@ -171,7 +171,11 @@ namespace CRProto
 	/** True when the combat GameMode is showing the developer Debug View. */
 	bool IsDebugView(const UObject* WorldContext);
 
+	/** Internal English name (logs, debug view). */
 	FString BoundaryTypeName(ECRBoundaryType Type);
+
+	/** Player-facing (Russian) edge label, drawn by the combat HUD. */
+	FString BoundaryTypeDisplayName(ECRBoundaryType Type);
 	FLinearColor BoundaryTypeColor(ECRBoundaryType Type);
 	FString EliminationReasonName(ECREliminationReason Reason);
 }

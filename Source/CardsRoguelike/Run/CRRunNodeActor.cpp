@@ -44,6 +44,9 @@ ACRRunNodeActor::ACRRunNodeActor()
 	Label->SetVerticalAlignment(EVRTA_TextCenter);
 	Label->SetWorldSize(55.f);
 	Label->SetRelativeLocation(FVector(0.f, 0.f, 110.f));
+	// The 3D text is lit by the dim map lighting and hard to read; it only marks the label anchor now.
+	// The run map HUD draws the label flat, bright and with a shadow at this position.
+	Label->SetHiddenInGame(true);
 }
 
 void ACRRunNodeActor::InitNode(FName InNodeId, ECRRoomType InRoomType)
@@ -73,30 +76,32 @@ void ACRRunNodeActor::SetVisualState(ECRRunNodeState InState, bool bHovered)
 	FString Text = CRRun::RoomTypeName(RoomType);
 	FLinearColor PedestalColor = Base;
 	FLinearColor HaloColor = FLinearColor::Black;
-	FColor LabelColor = FColor::White;
+	FColor StateLabelColor = FColor::White;
 	bool bShowHalo = false;
 	float Lift = 0.f;
 
+	// Label colors stay bright in every state so they read on the dark map;
+	// Locked/Completed are still a step dimmer than Available/Current.
 	switch (InState)
 	{
 	case ECRRunNodeState::Locked:
 		PedestalColor = FMath::Lerp(Base, FLinearColor(0.1f, 0.1f, 0.1f), 0.6f) * 0.35f;
-		LabelColor = FColor(110, 110, 110);
+		StateLabelColor = FColor(190, 190, 198);
 		break;
 	case ECRRunNodeState::Available:
 		bShowHalo = true;
 		HaloColor = bHovered ? FLinearColor::White : FLinearColor(1.f, 0.8f, 0.15f);
-		LabelColor = bHovered ? FColor::White : FColor(255, 225, 120);
+		StateLabelColor = bHovered ? FColor::White : FColor(255, 236, 150);
 		Lift = bHovered ? 25.f : 0.f;
 		break;
 	case ECRRunNodeState::Current:
 		bShowHalo = true;
 		HaloColor = FLinearColor(0.1f, 0.9f, 1.f);
-		LabelColor = FColor(120, 240, 255);
+		StateLabelColor = FColor(160, 246, 255);
 		break;
 	case ECRRunNodeState::Completed:
 		PedestalColor = FMath::Lerp(Base, FLinearColor(0.35f, 0.35f, 0.35f), 0.7f) * 0.5f;
-		LabelColor = FColor(150, 150, 150);
+		StateLabelColor = FColor(205, 205, 210);
 		Text += TEXT("  (done)");
 		break;
 	}
@@ -107,7 +112,14 @@ void ACRRunNodeActor::SetVisualState(ECRRunNodeState InState, bool bHovered)
 	Pedestal->SetRelativeLocation(FVector(0.f, 0.f, -20.f + Lift));
 	Label->SetRelativeLocation(FVector(0.f, 0.f, 110.f + Lift));
 	Label->SetText(FText::FromString(Text));
-	Label->SetTextRenderColor(LabelColor);
+	Label->SetTextRenderColor(StateLabelColor);
+	LabelText = Text;
+	LabelColor = StateLabelColor.ReinterpretAsLinear();
+}
+
+FVector ACRRunNodeActor::GetLabelWorldLocation() const
+{
+	return Label ? Label->GetComponentLocation() : GetActorLocation();
 }
 
 void ACRRunNodeActor::SetComponentColor(UStaticMeshComponent* Component, const FLinearColor& Color)
