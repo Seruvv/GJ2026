@@ -355,7 +355,10 @@ void ACRRunMapActor::OnMarkerArrived()
 	}
 	else
 	{
-		ArrivalSubtitle = TEXT("Заглушка — игровой процесс пока не реализован");
+		// The Return ends a run from the hub: its loot was just delivered to the sanctuary.
+		const FCRRunNodeData* Arrived = Run ? Run->GetCurrentNode() : nullptr;
+		const bool bProfileReturn = Run && Run->IsProfileRun() && Arrived && Arrived->RoomType == ECRRoomType::Return;
+		ArrivalSubtitle = bProfileReturn ? TEXT("Поход завершён — добыча доставлена в убежище") : TEXT("Заглушка — игровой процесс пока не реализован");
 	}
 
 	if (!PendingRoomMap.IsEmpty())

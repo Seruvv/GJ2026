@@ -1,5 +1,6 @@
 ﻿#include "CRRunMapHUD.h"
 
+#include "../Meta/CRProfileSubsystem.h"
 #include "CRRunMapActor.h"
 #include "CRRunMapGameMode.h"
 #include "CRRunMapPlayerController.h"
@@ -31,6 +32,8 @@ void ACRRunMapHUD::DrawHUD()
 
 	const float S = Canvas->ClipY / 1080.f;
 	const FCRRunState& State = Run->GetRunState();
+	ReturnRect = FBox2D(ForceInit);
+	LeaveRect = FBox2D(ForceInit);
 
 	if (!Run->HasRun())
 	{
@@ -102,11 +105,17 @@ void ACRRunMapHUD::DrawHUD()
 		DrawTextCentered(Map->GetArrivalSubtitle(), RunHudDimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
 	}
 
-	// Bottom hint.
+	// Bottom hint. Runs from the hub go back to the sanctuary; developer runs restart with R.
 	const bool bFinished = Current && Current->ConnectedNodeIds.Num() == 0;
-	const TCHAR* Hint = bFailed ? TEXT("R — начать новый забег")
-		: (bFinished ? TEXT("Конец маршрута — R начинает новый забег") : TEXT("Выберите подсвеченную комнату"));
+	const bool bProfileRun = Run->IsProfileRun();
+	const TCHAR* Hint = bProfileRun
+		? (bFailed ? TEXT("Хомяк погиб — вернитесь в убежище") : (bFinished ? TEXT("Конец маршрута — вернитесь в убежище") : TEXT("Выберите подсвеченную комнату")))
+		: (bFailed ? TEXT("R — начать новый забег") : (bFinished ? TEXT("Конец маршрута — R начинает новый забег") : TEXT("Выберите подсвеченную комнату")));
 	DrawTextCentered(Hint, bFailed ? RunHudTextColor : RunHudDimTextColor, CenterX, Canvas->ClipY - 50.f * S, 1.2f * S);
+	if (bProfileRun)
+	{
+		DrawProfileRunControls(State, S);
+	}
 
 	const ACRRunMapPlayerController* PC = Cast<ACRRunMapPlayerController>(GetOwningPlayerController());
 	if (PC && PC->IsDebugView())
@@ -127,6 +136,86 @@ void ACRRunMapHUD::DrawHUD()
 		Y += 22.f * S;
 		DrawTextAt(FString::Printf(TEXT("Deck: %d cards   Artifacts: %d"), State.DeckCardIds.Num(), State.ArtifactIds.Num()), RunHudTextColor, X, Y, 1.0f * S);
 	}
+}
+
+void ACRRunMapHUD::DrawProfileRunControls(const FCRRunState& State, float S)
+{
+	float MouseX = 0.f;
+	float MouseY = 0.f;
+	if (const APlayerController* PC = GetOwningPlayerController())
+	{
+		PC->GetMousePosition(MouseX, MouseY);
+	}
+
+	if (State.Status == ECRRunStatus::Completed || State.Status == ECRRunStatus::Failed)
+	{
+		// The run already delivered its loot to the profile (see UCRProfileSubsystem); show what arrived.
+		FString Sub;
+		const UCRProfileSubsystem* Profiles = GetGameInstance() ? GetGameInstance()->GetSubsystem<UCRProfileSubsystem>() : nullptr;
+		const UCRProfileSaveGame* Profile = Profiles ? Profiles->GetActiveProfile() : nullptr;
+		if (Profile && Profile->LastRun.bValid && Profile->LastRun.RunSeed == State.RunSeed)
+		{
+			Sub = FString::Printf(TEXT("доставлено: %s"), *CRMeta::FormatGain(Profile->LastRun.Delivered));
+		}
+		const float CenterX = Canvas->ClipX * 0.5f;
+		ReturnRect = FBox2D(FVector2D(CenterX - 230.f * S, Canvas->ClipY - 170.f * S), FVector2D(CenterX + 230.f * S, Canvas->ClipY - 88.f * S));
+		DrawButtonBox(ReturnRect, TEXT("ВЕРНУТЬСЯ В УБЕЖИЩЕ"), Sub, ReturnRect.IsInside(FVector2D(MouseX, MouseY)), S);
+		return;
+	}
+
+	if (State.Status == ECRRunStatus::Active)
+	{
+		const bool bArmed = GetWorld() && GetWorld()->GetRealTimeSeconds() - LeaveArmedTime < 4.0;
+		const float W = 220.f * S;
+		const float X = Canvas->ClipX - W - 40.f * S;
+		LeaveRect = FBox2D(FVector2D(X, 140.f * S), FVector2D(X + W, 196.f * S));
+		DrawButtonBox(LeaveRect, bArmed ? TEXT("ТОЧНО ПОКИНУТЬ?") : TEXT("ПОКИНУТЬ ПОХОД"),
+			bArmed ? TEXT("добыча будет потеряна") : TEXT("вернуться в убежище"), LeaveRect.IsInside(FVector2D(MouseX, MouseY)), S);
+	}
+}
+
+void ACRRunMapHUD::DrawButtonBox(const FBox2D& Rect, const FString& Label, const FString& SubLabel, bool bHovered, float S)
+{
+	const FVector2D Size = Rect.GetSize();
+	DrawRect(bHovered ? FLinearColor(0.55f, 0.4f, 0.16f, 0.97f) : FLinearColor(0.4f, 0.28f, 0.1f, 0.94f), Rect.Min.X, Rect.Min.Y, Size.X, Size.Y);
+	const FLinearColor Border = bHovered ? FLinearColor::White : FLinearColor(0.95f, 0.78f, 0.4f);
+	const float T = 2.f * S;
+	DrawRect(Border, Rect.Min.X, Rect.Min.Y, Size.X, T);
+	DrawRect(Border, Rect.Min.X, Rect.Max.Y - T, Size.X, T);
+	DrawRect(Border, Rect.Min.X, Rect.Min.Y, T, Size.Y);
+	DrawRect(Border, Rect.Max.X - T, Rect.Min.Y, T, Size.Y);
+	const float LabelScale = FMath::Min(1.4f * S, Size.Y / 40.f);
+	const float LabelY = SubLabel.IsEmpty() ? Rect.GetCenter().Y - 12.f * LabelScale : Rect.Min.Y + 6.f * S;
+	DrawTextCentered(Label, RunHudTextColor, Rect.GetCenter().X, LabelY, LabelScale);
+	if (!SubLabel.IsEmpty())
+	{
+		DrawTextCentered(SubLabel, RunHudDimTextColor, Rect.GetCenter().X, Rect.Max.Y - 26.f * S, 0.95f * S);
+	}
+}
+
+ECRRunMapButton ACRRunMapHUD::HitTest(const FVector2D& ScreenPos) const
+{
+	if (ReturnRect.bIsValid && ReturnRect.IsInside(ScreenPos))
+	{
+		return ECRRunMapButton::ReturnToHub;
+	}
+	if (LeaveRect.bIsValid && LeaveRect.IsInside(ScreenPos))
+	{
+		return ECRRunMapButton::LeaveRun;
+	}
+	return ECRRunMapButton::None;
+}
+
+bool ACRRunMapHUD::ConfirmLeave()
+{
+	const double Now = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0;
+	if (Now - LeaveArmedTime < 4.0)
+	{
+		LeaveArmedTime = -100.0;
+		return true;
+	}
+	LeaveArmedTime = Now;
+	return false;
 }
 
 void ACRRunMapHUD::DrawPanel(float X, float Y, float W, float H)
