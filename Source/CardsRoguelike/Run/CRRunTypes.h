@@ -51,6 +51,10 @@ struct FCRRunNodeData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
 	ECRRoomType RoomType = ECRRoomType::Combat;
 
+	/** Column of the run graph (0 = Start). Edges only ever lead to the next layer. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 Layer = 0;
+
 	/** Position on the 3D run map (visualization only). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
 	FVector Position = FVector::ZeroVector;
@@ -176,6 +180,10 @@ struct FCRRunState
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
 	ECRRunStatus Status = ECRRunStatus::NotStarted;
+
+	/** Seed the run graph was generated from; the same seed always rebuilds the same map. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 RunSeed = 0;
 
 	/**
 	 * Whether the room at CurrentNodeId has been resolved (e.g. its combat won).

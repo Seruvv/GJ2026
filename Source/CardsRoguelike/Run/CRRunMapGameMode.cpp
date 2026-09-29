@@ -24,7 +24,7 @@ void ACRRunMapGameMode::StartPlay()
 	{
 		if (!Run->HasRun())
 		{
-			Run->StartPrototypeRun();
+			Run->StartFreshRun();
 		}
 	}
 

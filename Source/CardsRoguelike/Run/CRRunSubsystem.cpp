@@ -3,13 +3,58 @@
 #include "../Combat/CRCardLibrary.h"
 #include "../Event/CREventDefinition.h"
 #include "../Event/CREventPool.h"
+#include "CRRunGenerator.h"
+#include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCRRun, Log, All);
 
-void UCRRunSubsystem::StartPrototypeRun()
+namespace
 {
+	// Developer command: "CRRunSeed 12345" restarts the current game's run from that seed (bug repro).
+	FAutoConsoleCommandWithWorldAndArgs GCRRunSeedCommand(
+		TEXT("CRRunSeed"),
+		TEXT("Restart the prototype run from a given seed: CRRunSeed <int>. Without an argument a random seed is used."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+			UCRRunSubsystem* Run = GameInstance ? GameInstance->GetSubsystem<UCRRunSubsystem>() : nullptr;
+			if (!Run)
+			{
+				UE_LOG(LogCRRun, Warning, TEXT("CRRunSeed: no game instance run subsystem in this world"));
+				return;
+			}
+			if (Args.Num() > 0 && Args[0].IsNumeric())
+			{
+				Run->StartFreshRunWithSeed(FCString::Atoi(*Args[0]));
+			}
+			else
+			{
+				Run->StartFreshRun();
+			}
+		}));
+}
+
+int32 UCRRunSubsystem::MakeRandomRunSeed()
+{
+	// Not part of the graph stream: only picks which seed a new run uses.
+	const uint64 Mixed = FPlatformTime::Cycles64() ^ (uint64(FDateTime::UtcNow().GetTicks()) * 0x9E3779B97F4A7C15ull) ^ uint64(FMath::Rand());
+	return int32((Mixed ^ (Mixed >> 31)) & 0x7FFFFFFF) | 1;
+}
+
+void UCRRunSubsystem::StartFreshRun()
+{
+	StartFreshRunWithSeed(MakeRandomRunSeed());
+}
+
+void UCRRunSubsystem::StartFreshRunWithSeed(int32 Seed)
+{
+	// A fresh run replaces everything: node progress, shop and event states, hamster, deck, resources.
 	RunState = FCRRunState();
 	RunState.Status = ECRRunStatus::Active;
+	RunState.RunSeed = Seed;
 
 	RunState.Hamster.Name = TEXT("Test Hamster");
 	RunState.Hamster.MaxHP = 30;
@@ -17,14 +62,35 @@ void UCRRunSubsystem::StartPrototypeRun()
 	RunState.Hamster.ManaPerTurn = 3;
 
 	RunState.DeckCardIds = { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") };
-	BuildPrototypeGraph();
+
+	// The graph is generated exactly once per run; room maps and returns only read it.
+	const FCRRunGenerationResult Generated = CRRunGen::Generate(Seed);
+	RunState.Nodes = Generated.Nodes;
+	if (Generated.bUsedFallback)
+	{
+		UE_LOG(LogCRRun, Error, TEXT("Run generation failed for seed %d after %d attempts (%s); using the fallback graph"),
+			Seed, Generated.Attempts, *Generated.LastRejectReason);
+	}
+
 	// Start needs no resolving: its first rooms are open immediately.
-	RunState.CurrentNodeId = TEXT("Start");
+	RunState.CurrentNodeId = CRRunGen::StartNodeId();
 	RunState.VisitedNodeIds = { RunState.CurrentNodeId };
 	RunState.bCurrentRoomResolved = true;
 	RefreshNodeStates();
 
-	UE_LOG(LogCRRun, Log, TEXT("Prototype run started (%d nodes)"), RunState.Nodes.Num());
+	int32 Combats = 0;
+	int32 Events = 0;
+	int32 Shops = 0;
+	for (const FCRRunNodeData& Node : RunState.Nodes)
+	{
+		Combats += Node.RoomType == ECRRoomType::Combat ? 1 : 0;
+		Events += Node.RoomType == ECRRoomType::Event ? 1 : 0;
+		Shops += Node.RoomType == ECRRoomType::Shop ? 1 : 0;
+	}
+	UE_LOG(LogCRRun, Log, TEXT("Run generated with seed %d: %d nodes, %d edges, Combat %d, Event %d, Shop %d (attempt %d%s)"),
+		Seed, RunState.Nodes.Num(), CRRunGen::CountEdges(RunState.Nodes), Combats, Events, Shops, Generated.Attempts,
+		Generated.bUsedFallback ? TEXT(", FALLBACK") : TEXT(""));
+	UE_LOG(LogCRRun, Log, TEXT("Run graph %d: %s"), Seed, *CRRunGen::GraphSignature(RunState.Nodes));
 	OnRunStateChanged.Broadcast();
 }
 
@@ -33,43 +99,6 @@ void UCRRunSubsystem::AbandonRun()
 	RunState = FCRRunState();
 	UE_LOG(LogCRRun, Log, TEXT("Run abandoned"));
 	OnRunStateChanged.Broadcast();
-}
-
-void UCRRunSubsystem::BuildPrototypeGraph()
-{
-	// Fixed test layout. X is route progress, Y the branch, Z small height variation.
-	//
-	//              CombatA ------> CombatC
-	//             /               ^       \
-	//   Start ---+               /         Boss ---> Return
-	//             \             /         /
-	//              EventA -----+         /
-	//                    \              /
-	//                     ShopA --> CombatB
-	auto AddNode = [this](const TCHAR* Id, ECRRoomType Type, const FVector& Position, std::initializer_list<const TCHAR*> Next)
-	{
-		FCRRunNodeData Node;
-		Node.NodeId = Id;
-		Node.RoomType = Type;
-		Node.Position = Position;
-		for (const TCHAR* NextId : Next)
-		{
-			Node.ConnectedNodeIds.Add(NextId);
-		}
-		RunState.Nodes.Add(Node);
-	};
-
-	AddNode(TEXT("Start"),   ECRRoomType::Start,  FVector(0.f,    0.f,    0.f),   { TEXT("CombatA"), TEXT("EventA") });
-	// CombatA -> ShopA (M2.4) opens the economy test route: Combat -> Reward -> Shop -> Combat.
-	AddNode(TEXT("CombatA"), ECRRoomType::Combat, FVector(750.f,  -550.f, 80.f),  { TEXT("CombatC"), TEXT("ShopA") });
-	AddNode(TEXT("EventA"),  ECRRoomType::Event,  FVector(750.f,  450.f,  0.f),   { TEXT("CombatC"), TEXT("ShopA") });
-	// Event nodes name the pool they draw from; a generated map can assign regional or rare pools here.
-	RunState.Nodes.Last().EventPool = TSoftObjectPtr<UCREventPool>(FSoftObjectPath(CRRun::DefaultEventPoolPath()));
-	AddNode(TEXT("CombatC"), ECRRoomType::Combat, FVector(1600.f, -350.f, 140.f), { TEXT("Boss") });
-	AddNode(TEXT("ShopA"),   ECRRoomType::Shop,   FVector(1350.f, 950.f,  20.f),  { TEXT("CombatB") });
-	AddNode(TEXT("CombatB"), ECRRoomType::Combat, FVector(2050.f, 700.f,  60.f),  { TEXT("Boss") });
-	AddNode(TEXT("Boss"),    ECRRoomType::Boss,   FVector(2650.f, 100.f,  180.f), { TEXT("Return") });
-	AddNode(TEXT("Return"),  ECRRoomType::Return, FVector(3300.f, 100.f,  120.f), {});
 }
 
 void UCRRunSubsystem::RefreshNodeStates()

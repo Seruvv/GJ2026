@@ -139,11 +139,13 @@ void ACRRunMapActor::RebuildMap()
 	{
 		Marker->SetVisibility(false);
 		DisplayedNodeId = NAME_None;
+		BuiltRunSeed = 0;
 		return;
 	}
 
 	const FCRRunState& State = Run->GetRunState();
 	const FVector Origin = GetActorLocation();
+	BuiltRunSeed = State.RunSeed;
 
 	// Diorama base slab under the whole route, and a pillar holding up each pedestal.
 	FBox Bounds(ForceInit);
@@ -259,9 +261,9 @@ FVector ACRRunMapActor::GetMarkerRestLocation(FName NodeId) const
 void ACRRunMapActor::OnRunStateChanged()
 {
 	const UCRRunSubsystem* Run = GetRunSubsystem();
-	if (!Run || !Run->HasRun() || NodeActors.Num() != Run->GetRunState().Nodes.Num())
+	if (!Run || !Run->HasRun() || NodeActors.Num() != Run->GetRunState().Nodes.Num() || BuiltRunSeed != Run->GetRunState().RunSeed)
 	{
-		// Run started, restarted or abandoned: rebuild from scratch.
+		// Run started, restarted (possibly with the same node count, e.g. a new seed) or abandoned: rebuild.
 		RebuildMap();
 		return;
 	}
