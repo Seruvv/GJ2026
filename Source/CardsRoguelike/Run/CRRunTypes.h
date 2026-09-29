@@ -1,4 +1,4 @@
-// Persistent run data types. Plain data only: no actor references, so the state survives map changes.
+﻿// Persistent run data types. Plain data only: no actor references, so the state survives map changes.
 
 #pragma once
 
@@ -226,7 +226,10 @@ struct FCRRunState
 
 namespace CRRun
 {
+	/** English room type name for logs, diagnostics and graph signatures. */
 	FString RoomTypeName(ECRRoomType Type);
+	/** Player-facing (Russian) room type name for the run map UI. */
+	FString RoomTypeDisplayName(ECRRoomType Type);
 	FLinearColor RoomTypeColor(ECRRoomType Type);
 
 	/** Prototype maps used by the run loop. */

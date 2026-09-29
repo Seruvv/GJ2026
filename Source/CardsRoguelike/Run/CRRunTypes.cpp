@@ -16,6 +16,20 @@ namespace CRRun
 		return TEXT("?");
 	}
 
+	FString RoomTypeDisplayName(ECRRoomType Type)
+	{
+		switch (Type)
+		{
+		case ECRRoomType::Start:  return TEXT("НАЧАЛО");
+		case ECRRoomType::Combat: return TEXT("БОЙ");
+		case ECRRoomType::Shop:   return TEXT("ЛАВКА");
+		case ECRRoomType::Event:  return TEXT("СОБЫТИЕ");
+		case ECRRoomType::Boss:   return TEXT("БОСС");
+		case ECRRoomType::Return: return TEXT("ВОЗВРАЩЕНИЕ");
+		}
+		return TEXT("?");
+	}
+
 	const TArray<FString>& MerchantLines()
 	{
 		static const TArray<FString> Lines = {

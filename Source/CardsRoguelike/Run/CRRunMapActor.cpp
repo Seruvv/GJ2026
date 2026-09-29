@@ -212,11 +212,11 @@ void ACRRunMapActor::RebuildMap()
 	const FCRRunNodeData* CurrentNode = Run->GetCurrentNode();
 	if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Combat)
 	{
-		ArrivalTitle = TEXT("COMBAT CLEARED");
+		ArrivalTitle = TEXT("БОЙ ВЫИГРАН");
 	}
 	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Shop)
 	{
-		ArrivalTitle = TEXT("LEFT THE SHOP");
+		ArrivalTitle = TEXT("ЛАВКА ПОКИНУТА");
 	}
 	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Event)
 	{
@@ -334,18 +334,18 @@ void ACRRunMapActor::OnMarkerArrived()
 {
 	const UCRRunSubsystem* Run = GetRunSubsystem();
 	const FCRRunNodeData* Node = Run ? Run->GetCurrentNode() : nullptr;
-	ArrivalTitle = Node ? FString::Printf(TEXT("%s ROOM"), *CRRun::RoomTypeName(Node->RoomType)) : FString();
+	ArrivalTitle = Node ? CRRun::RoomTypeDisplayName(Node->RoomType) : FString();
 
 	// Run state already points at the unresolved room; the room's map reads it on load.
 	PendingRoomMap.Reset();
 	if (Run && Run->IsInCombatRoom())
 	{
-		ArrivalSubtitle = TEXT("Entering combat...");
+		ArrivalSubtitle = TEXT("Начинается бой...");
 		PendingRoomMap = CRRun::CombatMapPath();
 	}
 	else if (Run && Run->IsInShopRoom())
 	{
-		ArrivalSubtitle = TEXT("Entering shop...");
+		ArrivalSubtitle = TEXT("Заходим в лавку...");
 		PendingRoomMap = CRRun::ShopMapPath();
 	}
 	else if (Run && Run->IsInEventRoom())
@@ -355,7 +355,7 @@ void ACRRunMapActor::OnMarkerArrived()
 	}
 	else
 	{
-		ArrivalSubtitle = TEXT("Placeholder room - no gameplay yet");
+		ArrivalSubtitle = TEXT("Заглушка — игровой процесс пока не реализован");
 	}
 
 	if (!PendingRoomMap.IsEmpty())

@@ -1,4 +1,4 @@
-#include "CRRunMapHUD.h"
+﻿#include "CRRunMapHUD.h"
 
 #include "CRRunMapActor.h"
 #include "CRRunMapGameMode.h"
@@ -34,7 +34,7 @@ void ACRRunMapHUD::DrawHUD()
 
 	if (!Run->HasRun())
 	{
-		DrawTextCentered(TEXT("No active run  (R to start the test run)"), RunHudTextColor, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.45f, 1.6f * S);
+		DrawTextCentered(TEXT("Нет активного забега  (R — начать забег)"), RunHudTextColor, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.45f, 1.6f * S);
 		return;
 	}
 	const bool bFailed = State.Status == ECRRunStatus::Failed;
@@ -61,28 +61,28 @@ void ACRRunMapHUD::DrawHUD()
 
 	// Top left: run and hamster.
 	const FCRRunNodeData* Current = Run->GetCurrentNode();
-	const FString RoomName = Current ? CRRun::RoomTypeName(Current->RoomType) : FString(TEXT("-"));
+	const FString RoomName = Current ? CRRun::RoomTypeDisplayName(Current->RoomType) : FString(TEXT("-"));
 	float X = 28.f * S;
 	float Y = 24.f * S;
 	DrawPanel(X - 12.f * S, Y - 10.f * S, 330.f * S, 150.f * S);
-	DrawTextAt(bFailed ? TEXT("RUN FAILED") : TEXT("RUN"), bFailed ? FLinearColor(1.f, 0.3f, 0.25f) : FLinearColor(0.45f, 1.f, 0.55f), X, Y, 2.0f * S);
+	DrawTextAt(bFailed ? TEXT("ЗАБЕГ ПРОВАЛЕН") : TEXT("ЗАБЕГ"), bFailed ? FLinearColor(1.f, 0.3f, 0.25f) : FLinearColor(0.45f, 1.f, 0.55f), X, Y, 2.0f * S);
 	Y += 44.f * S;
-	DrawTextAt(FString::Printf(TEXT("Hamster: %s"), *State.Hamster.Name), RunHudTextColor, X, Y, 1.25f * S);
+	DrawTextAt(FString::Printf(TEXT("Хомяк: %s"), *State.Hamster.Name), RunHudTextColor, X, Y, 1.25f * S);
 	Y += 30.f * S;
-	DrawTextAt(FString::Printf(TEXT("HP: %d / %d"), State.Hamster.CurrentHP, State.Hamster.MaxHP), RunHudTextColor, X, Y, 1.25f * S);
+	DrawTextAt(FString::Printf(TEXT("Здоровье: %d / %d"), State.Hamster.CurrentHP, State.Hamster.MaxHP), RunHudTextColor, X, Y, 1.25f * S);
 	Y += 30.f * S;
-	DrawTextAt(FString::Printf(TEXT("Current room: %s"), *RoomName), RunHudTextColor, X, Y, 1.25f * S);
+	DrawTextAt(FString::Printf(TEXT("Текущая комната: %s"), *RoomName), RunHudTextColor, X, Y, 1.25f * S);
 
 	// Top right: currencies carried this run.
 	const float W = 220.f * S;
 	X = Canvas->ClipX - W - 28.f * S;
 	Y = 24.f * S;
 	DrawPanel(X - 12.f * S, Y - 10.f * S, W, 112.f * S);
-	DrawTextAt(FString::Printf(TEXT("Silver  %d"), State.Carried.Silver), FLinearColor(0.85f, 0.88f, 0.95f), X, Y, 1.3f * S);
+	DrawTextAt(FString::Printf(TEXT("Серебро  %d"), State.Carried.Silver), FLinearColor(0.85f, 0.88f, 0.95f), X, Y, 1.3f * S);
 	Y += 32.f * S;
-	DrawTextAt(FString::Printf(TEXT("Food    %d"), State.Carried.Food), FLinearColor(0.95f, 0.75f, 0.4f), X, Y, 1.3f * S);
+	DrawTextAt(FString::Printf(TEXT("Еда  %d"), State.Carried.Food), FLinearColor(0.95f, 0.75f, 0.4f), X, Y, 1.3f * S);
 	Y += 32.f * S;
-	DrawTextAt(FString::Printf(TEXT("Wood    %d"), State.Carried.Wood), FLinearColor(0.75f, 0.55f, 0.35f), X, Y, 1.3f * S);
+	DrawTextAt(FString::Printf(TEXT("Дерево  %d"), State.Carried.Wood), FLinearColor(0.75f, 0.55f, 0.35f), X, Y, 1.3f * S);
 
 	// Center banner: run failure takes priority over room arrival messages.
 	const ACRRunMapGameMode* GM = GetWorld()->GetAuthGameMode<ACRRunMapGameMode>();
@@ -92,8 +92,8 @@ void ACRRunMapHUD::DrawHUD()
 	if (bFailed)
 	{
 		DrawPanel(CenterX - 300.f * S, BannerY - 14.f * S, 600.f * S, 110.f * S);
-		DrawTextCentered(TEXT("RUN FAILED"), FLinearColor(1.f, 0.3f, 0.25f), CenterX, BannerY, 2.2f * S);
-		DrawTextCentered(FString::Printf(TEXT("%s fell in %s"), *State.Hamster.Name, *RoomName), RunHudDimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
+		DrawTextCentered(TEXT("ЗАБЕГ ПРОВАЛЕН"), FLinearColor(1.f, 0.3f, 0.25f), CenterX, BannerY, 2.2f * S);
+		DrawTextCentered(FString::Printf(TEXT("%s погиб. Комната: %s"), *State.Hamster.Name, *RoomName), RunHudDimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
 	}
 	else if (Map && !Map->GetArrivalTitle().IsEmpty())
 	{
@@ -104,8 +104,8 @@ void ACRRunMapHUD::DrawHUD()
 
 	// Bottom hint.
 	const bool bFinished = Current && Current->ConnectedNodeIds.Num() == 0;
-	const TCHAR* Hint = bFailed ? TEXT("Press R to start a new prototype run")
-		: (bFinished ? TEXT("End of the route  -  R restarts the test run") : TEXT("Click a highlighted room to travel"));
+	const TCHAR* Hint = bFailed ? TEXT("R — начать новый забег")
+		: (bFinished ? TEXT("Конец маршрута — R начинает новый забег") : TEXT("Выберите подсвеченную комнату"));
 	DrawTextCentered(Hint, bFailed ? RunHudTextColor : RunHudDimTextColor, CenterX, Canvas->ClipY - 50.f * S, 1.2f * S);
 
 	const ACRRunMapPlayerController* PC = Cast<ACRRunMapPlayerController>(GetOwningPlayerController());
