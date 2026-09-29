@@ -125,8 +125,10 @@ void ACRShopHUD::DrawOffers(const ACRShopGameMode* GM, float S, const FVector2D&
 			const FBox2D Badge(Rect.Min + FVector2D(8.f * S), Rect.Min + FVector2D(8.f * S) + FVector2D(30.f * S));
 			DrawBox(Badge, FLinearColor(0.25f, 0.6f, 1.f, bAvailable ? 1.f : 0.4f));
 			DrawTextCentered(FString::FromInt(Card->ManaCost), FLinearColor::White, Badge.GetCenter().X, Badge.Min.Y + 3.f * S, 1.2f * S);
-			DrawTextCentered(Card->Name, NameColor, CenterX, Rect.Min.Y + 60.f * S, 1.6f * S);
-			DrawTextCentered(Card->ShortText, bAvailable ? FLinearColor(0.75f, 0.8f, 0.9f) : ShopHudDimTextColor, CenterX, Rect.Min.Y + 100.f * S, 1.05f * S);
+			// Card titles/descriptions (Russian) can be wider than the offer card: shrink them to fit.
+			const float MaxW = CardW - 14.f * S;
+			DrawTextCentered(Card->Name, NameColor, CenterX, Rect.Min.Y + 60.f * S, FitScale(Card->Name, 1.6f * S, MaxW));
+			DrawTextCentered(Card->ShortText, bAvailable ? FLinearColor(0.75f, 0.8f, 0.9f) : ShopHudDimTextColor, CenterX, Rect.Min.Y + 100.f * S, FitScale(Card->ShortText, 1.05f * S, MaxW));
 		}
 		else
 		{
@@ -234,6 +236,14 @@ void ACRShopHUD::DrawFrame(const FBox2D& Box, const FLinearColor& Color, float T
 void ACRShopHUD::DrawTextAt(const FString& Text, const FLinearColor& Color, float X, float Y, float Scale)
 {
 	DrawText(Text, Color, X, Y, GEngine->GetMediumFont(), Scale);
+}
+
+float ACRShopHUD::FitScale(const FString& Text, float Scale, float MaxWidth) const
+{
+	float W = 0.f;
+	float H = 0.f;
+	GetTextSize(Text, W, H, GEngine->GetMediumFont(), Scale);
+	return W > MaxWidth && W > 0.f ? Scale * MaxWidth / W : Scale;
 }
 
 void ACRShopHUD::DrawTextCentered(const FString& Text, const FLinearColor& Color, float CenterX, float Y, float Scale)

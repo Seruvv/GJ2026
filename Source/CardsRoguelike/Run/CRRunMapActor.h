@@ -32,6 +32,9 @@ public:
 	const FString& GetArrivalTitle() const { return ArrivalTitle; }
 	const FString& GetArrivalSubtitle() const { return ArrivalSubtitle; }
 
+	/** Spawned room actors by node id (the HUD draws their labels). */
+	const TMap<FName, TObjectPtr<ACRRunNodeActor>>& GetNodeActors() const { return NodeActors; }
+
 	UPROPERTY(EditAnywhere, Category = "CR|RunMap")
 	float MarkerMoveTime = 0.9f;
 

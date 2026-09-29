@@ -1,4 +1,4 @@
-#include "CRCombatGameMode.h"
+﻿#include "CRCombatGameMode.h"
 
 #include "CRArena.h"
 #include "CRCardLibrary.h"
@@ -375,7 +375,7 @@ void ACRCombatGameMode::SelectCard(int32 Index)
 	const FCRCardDef& Card = Cards[Index];
 	if (Card.ManaCost > Mana)
 	{
-		ShowMessage(FString::Printf(TEXT("Not enough mana for %s"), *Card.Name));
+		ShowMessage(FString::Printf(TEXT("Недостаточно маны: %s"), *Card.Name), FString::Printf(TEXT("Not enough mana for %s"), *Card.Id.ToString()));
 		return;
 	}
 
@@ -420,7 +420,7 @@ void ACRCombatGameMode::HandleClick(AActor* HitActor, const FVector& WorldLocati
 		}
 		else
 		{
-			ShowMessage(TEXT("Click an enemy or barrel"));
+			ShowMessage(TEXT("Выберите цель: противника или бочку"), TEXT("Click an enemy or barrel"));
 		}
 		break;
 
@@ -433,7 +433,7 @@ void ACRCombatGameMode::HandleClick(AActor* HitActor, const FVector& WorldLocati
 			}
 			else
 			{
-				ShowMessage(TEXT("Click an enemy or barrel first"));
+				ShowMessage(TEXT("Сначала выберите цель: противника или бочку"), TEXT("Click an enemy or barrel first"));
 			}
 		}
 		else
@@ -501,7 +501,7 @@ void ACRCombatGameMode::PlayCard(int32 Index, AActor* Target, const FVector& Poi
 		const FVector2D Dir = FVector2D(Point) - FVector2D(Target->GetActorLocation());
 		if (Dir.Size() < 30.f)
 		{
-			ShowMessage(TEXT("Aim farther from the target"));
+			ShowMessage(TEXT("Укажите точку дальше от цели"), TEXT("Aim farther from the target"));
 			return;
 		}
 		Mana -= Card.ManaCost;
@@ -910,12 +910,13 @@ FString ACRCombatGameMode::GetTurnStateName() const
 {
 	switch (TurnState)
 	{
-	case ECRTurnState::PlayerTurn:    return TEXT("PLAYER TURN");
-	case ECRTurnState::ResolvingCard: return TEXT("RESOLVING CARD");
-	case ECRTurnState::EnemyTurn:     return TEXT("ENEMY TURN");
-	case ECRTurnState::Victory:       return TEXT("VICTORY");
-	case ECRTurnState::Defeat:        return TEXT("DEFEAT");
-	case ECRTurnState::Reward:        return TEXT("REWARD");
+	// Player-facing (Russian) turn-panel headline.
+	case ECRTurnState::PlayerTurn:    return TEXT("ТВОЙ ХОД");
+	case ECRTurnState::ResolvingCard: return TEXT("РОЗЫГРЫШ КАРТЫ");
+	case ECRTurnState::EnemyTurn:     return TEXT("ХОД ПРОТИВНИКА");
+	case ECRTurnState::Victory:       return TEXT("ПОБЕДА");
+	case ECRTurnState::Defeat:        return TEXT("ПОРАЖЕНИЕ");
+	case ECRTurnState::Reward:        return TEXT("НАГРАДА");
 	}
 	return TEXT("?");
 }
@@ -928,20 +929,20 @@ FString ACRCombatGameMode::GetTargetingPrompt() const
 	}
 	if (!Cards.IsValidIndex(SelectedCard))
 	{
-		return TEXT("Drag a card to a target");
+		return TEXT("Перетащите карту на цель");
 	}
 
 	const FCRCardDef& Card = Cards[SelectedCard];
 	switch (Card.Targeting)
 	{
 	case ECRCardTargeting::PhysicsTarget:
-		return FString::Printf(TEXT("%s: click an enemy or barrel"), *Card.Name);
+		return FString::Printf(TEXT("%s: выберите цель — противника или бочку"), *Card.Name);
 	case ECRCardTargeting::PhysicsTargetThenPoint:
 		return PendingTarget.IsValid()
-			? FString::Printf(TEXT("Aim %s: left click to confirm, right click to cancel"), *Card.Name)
-			: FString::Printf(TEXT("%s: click an enemy or barrel"), *Card.Name);
+			? FString::Printf(TEXT("%s: укажите направление — ЛКМ подтвердить, ПКМ отмена"), *Card.Name)
+			: FString::Printf(TEXT("%s: выберите цель — противника или бочку"), *Card.Name);
 	case ECRCardTargeting::GroundPoint:
-		return FString::Printf(TEXT("%s: click a point on the arena"), *Card.Name);
+		return FString::Printf(TEXT("%s: выберите точку на арене"), *Card.Name);
 	default:
 		return Card.Name;
 	}
@@ -985,7 +986,9 @@ bool ACRCombatGameMode::TryDropCard(int32 Index, AActor* HitActor, const FVector
 	{
 		if (TurnState == ECRTurnState::PlayerTurn && Cards.IsValidIndex(Index))
 		{
-			ShowMessage(CanAffordCard(Index) ? TEXT("Invalid target - card returned") : TEXT("Not enough mana"));
+			const bool bAffordable = CanAffordCard(Index);
+			ShowMessage(bAffordable ? TEXT("Неверная цель — карта возвращена") : TEXT("Недостаточно маны"),
+				bAffordable ? TEXT("Invalid target - card returned") : TEXT("Not enough mana"));
 		}
 		return false;
 	}
@@ -1011,11 +1014,15 @@ void ACRCombatGameMode::ToggleDebugView()
 	LogEvent(bDebugView ? TEXT("Debug View on") : TEXT("Playtest View on"));
 }
 
-void ACRCombatGameMode::ShowMessage(const FString& Message)
+void ACRCombatGameMode::ShowMessage(const FString& Message, const FString& LogMessage)
 {
 	FlashMessage = Message;
 	FlashMessageTime = GetWorld()->GetRealTimeSeconds();
-	LogEvent(Message);
+	// The on-screen text is Russian; logs (and the debug event list) stay in English.
+	if (!LogMessage.IsEmpty())
+	{
+		LogEvent(LogMessage);
+	}
 }
 
 FString ACRCombatGameMode::GetActiveMessage() const

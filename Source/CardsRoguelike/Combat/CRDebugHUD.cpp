@@ -1,12 +1,15 @@
-#include "CRDebugHUD.h"
+﻿#include "CRDebugHUD.h"
 
+#include "CRBoundarySegment.h"
 #include "CRCombatGameMode.h"
 #include "CREnemy.h"
 #include "CRHamster.h"
+#include "CRPit.h"
 #include "CRPlayerController.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -46,6 +49,7 @@ void ACRDebugHUD::DrawHUD()
 	RewardCardRects.Reset();
 	RewardSkipRect = FBox2D(ForceInit);
 
+	DrawArenaLabels(GM);
 	DrawEnemyOverlays(GM);
 
 	bool bValidDrop = false;
@@ -109,8 +113,8 @@ void ACRDebugHUD::DrawRewardPanel(const ACRCombatGameMode* GM, const FVector2D& 
 	const float PanelH = 470.f * S;
 	DrawBox(FBox2D(FVector2D(CenterX - PanelW * 0.5f, Top), FVector2D(CenterX + PanelW * 0.5f, Top + PanelH)), FLinearColor(0.02f, 0.02f, 0.03f, 0.88f));
 
-	DrawTextCentered(TEXT("COMBAT CLEARED"), FLinearColor(1.f, 0.85f, 0.35f), CenterX, Top + 18.f * S, 2.2f * S);
-	DrawTextCentered(bCommitted ? TEXT("Returning to the run map...") : TEXT("Choose a card"), TextColor, CenterX, Top + 72.f * S, 1.3f * S);
+	DrawTextCentered(TEXT("НАГРАДА"), FLinearColor(1.f, 0.85f, 0.35f), CenterX, Top + 18.f * S, 2.2f * S);
+	DrawTextCentered(bCommitted ? TEXT("Возвращение на карту...") : TEXT("Выберите одну карту"), TextColor, CenterX, Top + 72.f * S, 1.3f * S);
 
 	const float RowTop = Top + 112.f * S;
 	const float X0 = CenterX - RowW * 0.5f;
@@ -141,16 +145,16 @@ void ACRDebugHUD::DrawRewardPanel(const ACRCombatGameMode* GM, const FVector2D& 
 	}
 
 	// Skip button.
-	const FVector2D SkipSize(200.f * S, 52.f * S);
+	const FVector2D SkipSize(240.f * S, 52.f * S);
 	const FVector2D SkipMin(CenterX - SkipSize.X * 0.5f, RowTop + CardH + 26.f * S);
 	RewardSkipRect = FBox2D(SkipMin, SkipMin + SkipSize);
 	const bool bSkipHovered = !bCommitted && RewardSkipRect.IsInside(MousePos);
 	const bool bSkipped = bCommitted && GM->GetChosenReward().IsNone();
 	DrawBox(RewardSkipRect, bSkipHovered ? FLinearColor(0.3f, 0.3f, 0.35f, 0.95f) : FLinearColor(0.15f, 0.15f, 0.18f, 0.92f));
 	DrawFrame(RewardSkipRect, bSkipped ? ValidColor : (bSkipHovered ? FLinearColor::White : FLinearColor(0.5f, 0.5f, 0.55f)), 3.f * S);
-	DrawTextCentered(TEXT("SKIP"), bCommitted && !bSkipped ? DimTextColor : TextColor, CenterX, SkipMin.Y + 10.f * S, 1.5f * S);
+	DrawTextCentered(TEXT("ПРОПУСТИТЬ"), bCommitted && !bSkipped ? DimTextColor : TextColor, CenterX, SkipMin.Y + 10.f * S, 1.5f * S);
 
-	DrawTextCentered(FString::Printf(TEXT("+%d Silver     +%d Food     +%d Wood"), GM->RewardSilver, GM->RewardFood, GM->RewardWood),
+	DrawTextCentered(FString::Printf(TEXT("Серебро +%d     Еда +%d     Дерево +%d"), GM->RewardSilver, GM->RewardFood, GM->RewardWood),
 		FLinearColor(0.85f, 0.9f, 0.7f), CenterX, RewardSkipRect.Max.Y + 18.f * S, 1.3f * S);
 }
 
@@ -212,7 +216,7 @@ FBox2D ACRDebugHUD::GetEndTurnRect() const
 	}
 
 	const float S = ViewH / 1080.f;
-	const FVector2D Size(200.f * S, 64.f * S);
+	const FVector2D Size(260.f * S, 64.f * S);
 	const FVector2D Min(ViewW - 28.f * S - Size.X, ViewH - 28.f * S - Size.Y);
 	return FBox2D(Min, Min + Size);
 }
@@ -237,8 +241,8 @@ void ACRDebugHUD::DrawEndTurnButton(const ACRCombatGameMode* GM, const FVector2D
 	DrawBox(Rect, Fill);
 	DrawFrame(Rect, Border, 3.f * S);
 	const float CenterX = Rect.GetCenter().X;
-	DrawTextCentered(TEXT("END TURN"), Label, CenterX, Rect.Min.Y + 8.f * S, 1.5f * S);
-	DrawTextCentered(TEXT("Space"), bActive ? FLinearColor(0.8f, 0.9f, 0.8f) : DimTextColor, CenterX, Rect.Min.Y + 38.f * S, 1.0f * S);
+	DrawTextFitted(TEXT("ЗАВЕРШИТЬ ХОД"), Label, CenterX, Rect.Min.Y + 8.f * S, 1.5f * S, Rect.GetSize().X - 16.f * S);
+	DrawTextCentered(TEXT("Пробел"), bActive ? FLinearColor(0.8f, 0.9f, 0.8f) : DimTextColor, CenterX, Rect.Min.Y + 38.f * S, 1.0f * S);
 }
 
 // ---------------------------------------------------------------------------
@@ -259,13 +263,13 @@ void ACRDebugHUD::DrawTurnPanel(const ACRCombatGameMode* GM)
 	default: break;
 	}
 
-	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + 300.f * S, Y + 138.f * S)), PanelColor);
+	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + 330.f * S, Y + 138.f * S)), PanelColor);
 	DrawTextAt(GM->GetTurnStateName(), StateColor, X, Y, 2.0f * S);
 	Y += 44.f * S;
-	DrawTextAt(FString::Printf(TEXT("Turn %d"), GM->GetTurnNumber()), TextColor, X, Y, 1.3f * S);
+	DrawTextAt(FString::Printf(TEXT("Ход %d"), GM->GetTurnNumber()), TextColor, X, Y, 1.3f * S);
 	Y += 34.f * S;
 
-	DrawTextAt(TEXT("Mana"), TextColor, X, Y + 2.f * S, 1.3f * S);
+	DrawTextAt(TEXT("Мана"), TextColor, X, Y + 2.f * S, 1.3f * S);
 	const float PipSize = 22.f * S;
 	for (int32 i = 0; i < GM->ManaPerTurn; ++i)
 	{
@@ -307,7 +311,7 @@ void ACRDebugHUD::DrawHamsterPanel(const ACRCombatGameMode* GM)
 	float Y = 24.f * S;
 
 	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + W, Y + 128.f * S)), PanelColor);
-	DrawTextAt(TEXT("HAMSTER"), FLinearColor(1.f, 0.75f, 0.35f), X, Y, 1.4f * S);
+	DrawTextAt(TEXT("ХОМЯК"), FLinearColor(1.f, 0.75f, 0.35f), X, Y, 1.4f * S);
 	Y += 34.f * S;
 
 	const float Ratio = Hamster->GetMaxHP() > 0 ? FMath::Clamp(float(Hamster->GetHP()) / Hamster->GetMaxHP(), 0.f, 1.f) : 0.f;
@@ -318,9 +322,9 @@ void ACRDebugHUD::DrawHamsterPanel(const ACRCombatGameMode* GM)
 	DrawFrame(Bar, FLinearColor(0.8f, 0.8f, 0.8f, 0.8f), 1.5f * S);
 	Y += 30.f * S;
 
-	DrawTextAt(FString::Printf(TEXT("HP %d / %d"), Hamster->GetHP(), Hamster->GetMaxHP()), TextColor, X, Y, 1.3f * S);
+	DrawTextAt(FString::Printf(TEXT("Здоровье %d / %d"), Hamster->GetHP(), Hamster->GetMaxHP()), TextColor, X, Y, 1.3f * S);
 	Y += 30.f * S;
-	DrawTextAt(FString::Printf(TEXT("Armor %d"), Hamster->GetArmor()),
+	DrawTextAt(FString::Printf(TEXT("Броня %d"), Hamster->GetArmor()),
 		Hamster->GetArmor() > 0 ? FLinearColor(0.45f, 0.75f, 1.f) : DimTextColor, X, Y, 1.3f * S);
 }
 
@@ -387,8 +391,10 @@ void ACRDebugHUD::DrawCard(const FCRCardDef& Card, int32 Index, const FBox2D& Re
 	DrawBox(BadgeBox, Fade(bAffordable ? ManaColor : FLinearColor(0.45f, 0.12f, 0.1f)));
 	DrawTextCentered(FString::FromInt(Card.ManaCost), Fade(FLinearColor::White), BadgeBox.GetCenter().X, BadgeBox.Min.Y + 4.f * S, 1.4f * S * TextScale);
 
-	DrawTextCentered(Card.Name, Fade(bAffordable ? TextColor : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.32f, 1.6f * S * TextScale);
-	DrawTextCentered(Card.ShortText, Fade(bAffordable ? FLinearColor(0.75f, 0.8f, 0.9f) : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.55f, 1.05f * S * TextScale);
+	// Russian card titles/descriptions can be longer than the card: shrink to fit, wrap the description.
+	const float TextMaxW = Size.X - 14.f * S * TextScale;
+	DrawTextFitted(Card.Name, Fade(bAffordable ? TextColor : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.32f, 1.6f * S * TextScale, TextMaxW);
+	DrawTextFitted(Card.ShortText, Fade(bAffordable ? FLinearColor(0.75f, 0.8f, 0.9f) : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.52f, 1.05f * S * TextScale, TextMaxW, 0.9f);
 	DrawTextCentered(FString::Printf(TEXT("[%d]"), Index + 1), Fade(DimTextColor), CenterX, Rect.Max.Y - 30.f * S * TextScale, 1.0f * S * TextScale);
 }
 
@@ -422,7 +428,7 @@ void ACRDebugHUD::DrawEnemyOverlays(const ACRCombatGameMode* GM)
 		DrawBox(FBox2D(Bar.Min, FVector2D(Bar.Min.X + BarW * Ratio, Bar.Max.Y)), FLinearColor(0.9f, 0.15f, 0.1f));
 
 		const bool bAttack = Enemy->WillAttack();
-		DrawTextCentered(bAttack ? FString::Printf(TEXT("ATTACK %d"), Stats.Damage) : FString(TEXT("MOVE")),
+		DrawTextCentered(bAttack ? FString::Printf(TEXT("АТАКА %d"), Stats.Damage) : FString(TEXT("ДВИЖЕНИЕ")),
 			bAttack ? FLinearColor(1.f, 0.35f, 0.25f) : FLinearColor(1.f, 0.9f, 0.35f), Screen.X, Bar.Max.Y + 3.f * S, 1.15f * S);
 
 		if (bDebug)
@@ -430,6 +436,34 @@ void ACRDebugHUD::DrawEnemyOverlays(const ACRCombatGameMode* GM)
 			DrawTextCentered(FString::Printf(TEXT("%s %s  HP %d/%d"), *Enemy->GetDisplayName(),
 				Stats.CombatType == ECRCombatType::Melee ? TEXT("MELEE") : TEXT("RANGED"), Enemy->GetHP(), Stats.MaxHP),
 				FLinearColor::White, Screen.X, Bar.Min.Y - 22.f * S, 0.95f * S);
+		}
+	}
+}
+
+void ACRDebugHUD::DrawArenaLabels(const ACRCombatGameMode* GM)
+{
+	const float S = UIScale();
+
+	// Edge names (Debug View keeps the 3D English label with its cycling key instead).
+	if (!GM->IsDebugView())
+	{
+		for (TActorIterator<ACRBoundarySegment> It(GetWorld()); It; ++It)
+		{
+			const FVector Screen = Project(It->GetLabelWorldLocation());
+			if (Screen.Z > 0.f)
+			{
+				const FLinearColor Color = FMath::Lerp(CRProto::BoundaryTypeColor(It->GetBoundaryType()), FLinearColor::White, 0.45f);
+				DrawTextShadowCentered(CRProto::BoundaryTypeDisplayName(It->GetBoundaryType()), Color, Screen.X, Screen.Y - 12.f * S, 1.25f * S);
+			}
+		}
+	}
+
+	for (TActorIterator<ACRPit> It(GetWorld()); It; ++It)
+	{
+		const FVector Screen = Project(It->GetLabelWorldLocation());
+		if (Screen.Z > 0.f)
+		{
+			DrawTextShadowCentered(TEXT("ЯМА"), FLinearColor(1.f, 0.45f, 0.4f), Screen.X, Screen.Y - 12.f * S, 1.2f * S);
 		}
 	}
 }
@@ -544,10 +578,10 @@ void ACRDebugHUD::DrawResultBanner(const ACRCombatGameMode* GM)
 	}
 	const float S = UIScale();
 	const bool bWon = State == ECRTurnState::Victory;
-	DrawTextCentered(bWon ? TEXT("VICTORY") : TEXT("DEFEAT"), bWon ? FLinearColor::Green : FLinearColor::Red, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.36f, 5.f * S);
+	DrawTextCentered(bWon ? TEXT("ПОБЕДА") : TEXT("ПОРАЖЕНИЕ"), bWon ? FLinearColor::Green : FLinearColor::Red, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.36f, 5.f * S);
 	// Run rooms: a won fight goes on to the reward panel; a lost one returns to the map.
-	const TCHAR* Subtitle = !GM->IsRunIntegrated() ? TEXT("Press R to restart")
-		: (bWon ? TEXT("Reward incoming...") : TEXT("Returning to the run map..."));
+	const TCHAR* Subtitle = !GM->IsRunIntegrated() ? TEXT("Нажмите R, чтобы начать заново")
+		: (bWon ? TEXT("Получите награду") : TEXT("Возвращение на карту..."));
 	DrawTextCentered(Subtitle,
 		FLinearColor::White, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.36f + 110.f * S, 1.5f * S);
 }
@@ -581,6 +615,60 @@ void ACRDebugHUD::DrawTextCentered(const FString& Text, const FLinearColor& Colo
 	float H = 0.f;
 	GetTextSize(Text, W, H, GEngine->GetMediumFont(), Scale);
 	DrawText(Text, Color, CenterX - W * 0.5f, Y, GEngine->GetMediumFont(), Scale);
+}
+
+float ACRDebugHUD::TextWidth(const FString& Text, float Scale)
+{
+	float W = 0.f;
+	float H = 0.f;
+	GetTextSize(Text, W, H, GEngine->GetMediumFont(), Scale);
+	return W;
+}
+
+void ACRDebugHUD::DrawTextFitted(const FString& Text, const FLinearColor& Color, float CenterX, float Y, float Scale, float MaxWidth, float MinFactor)
+{
+	const float Width = TextWidth(Text, Scale);
+	if (Width <= MaxWidth || Width <= 0.f)
+	{
+		DrawTextCentered(Text, Color, CenterX, Y, Scale);
+		return;
+	}
+
+	// Shrink a little first; if it still does not fit and has spaces, wrap onto two lines instead.
+	const float Fitted = Scale * FMath::Max(MinFactor, MaxWidth / Width);
+	int32 Split = INDEX_NONE;
+	if (TextWidth(Text, Fitted) > MaxWidth)
+	{
+		// Break at the space closest to the middle.
+		for (int32 i = 0; i < Text.Len(); ++i)
+		{
+			if (Text[i] == TEXT(' ') && (Split == INDEX_NONE || FMath::Abs(i - Text.Len() / 2) < FMath::Abs(Split - Text.Len() / 2)))
+			{
+				Split = i;
+			}
+		}
+	}
+	if (Split == INDEX_NONE)
+	{
+		DrawTextCentered(Text, Color, CenterX, Y, Fitted);
+		return;
+	}
+
+	const FString First = Text.Left(Split);
+	const FString Second = Text.Mid(Split + 1);
+	const float LineScale = Scale * FMath::Max(MinFactor, FMath::Min(1.f, MaxWidth / FMath::Max(TextWidth(First, Scale), TextWidth(Second, Scale))));
+	float W = 0.f;
+	float H = 0.f;
+	GetTextSize(TEXT("Ay"), W, H, GEngine->GetMediumFont(), LineScale);
+	DrawTextCentered(First, Color, CenterX, Y, LineScale);
+	DrawTextCentered(Second, Color, CenterX, Y + H * 1.05f, LineScale);
+}
+
+void ACRDebugHUD::DrawTextShadowCentered(const FString& Text, const FLinearColor& Color, float CenterX, float Y, float Scale)
+{
+	const float Offset = FMath::Max(1.f, 2.f * UIScale());
+	DrawTextCentered(Text, FLinearColor(0.f, 0.f, 0.f, 0.85f), CenterX + Offset, Y + Offset, Scale);
+	DrawTextCentered(Text, Color, CenterX, Y, Scale);
 }
 
 void ACRDebugHUD::DrawWorldCircle(const FVector& Center, float Radius, const FLinearColor& Color, float Thickness)

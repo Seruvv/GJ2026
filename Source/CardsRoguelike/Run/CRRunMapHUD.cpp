@@ -3,6 +3,7 @@
 #include "CRRunMapActor.h"
 #include "CRRunMapGameMode.h"
 #include "CRRunMapPlayerController.h"
+#include "CRRunNodeActor.h"
 #include "CRRunSubsystem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -11,9 +12,10 @@
 
 namespace
 {
-	const FLinearColor RunHudPanelColor(0.02f, 0.02f, 0.03f, 0.72f);
-	const FLinearColor RunHudTextColor(0.92f, 0.92f, 0.95f);
-	const FLinearColor RunHudDimTextColor(0.55f, 0.55f, 0.6f);
+	// Readability: more opaque panels and brighter secondary text against the dark map.
+	const FLinearColor RunHudPanelColor(0.02f, 0.02f, 0.03f, 0.84f);
+	const FLinearColor RunHudTextColor(0.96f, 0.96f, 0.98f);
+	const FLinearColor RunHudDimTextColor(0.8f, 0.8f, 0.84f);
 }
 
 void ACRRunMapHUD::DrawHUD()
@@ -36,6 +38,26 @@ void ACRRunMapHUD::DrawHUD()
 		return;
 	}
 	const bool bFailed = State.Status == ECRRunStatus::Failed;
+
+	// Room labels: drawn flat on the canvas (bright, with a drop shadow) instead of lit 3D text.
+	if (const ACRRunMapGameMode* LabelGM = GetWorld()->GetAuthGameMode<ACRRunMapGameMode>())
+	{
+		if (const ACRRunMapActor* LabelMap = LabelGM->GetMapActor())
+		{
+			for (const TPair<FName, TObjectPtr<ACRRunNodeActor>>& Pair : LabelMap->GetNodeActors())
+			{
+				const ACRRunNodeActor* Node = Pair.Value;
+				const FVector Screen = Node ? Project(Node->GetLabelWorldLocation()) : FVector::ZeroVector;
+				if (Node && Screen.Z > 0.f && !Node->GetLabelText().IsEmpty())
+				{
+					const float LabelScale = 1.35f * S;
+					const float Shadow = FMath::Max(1.f, 2.f * S);
+					DrawTextCentered(Node->GetLabelText(), FLinearColor(0.f, 0.f, 0.f, 0.9f), Screen.X + Shadow, Screen.Y - 30.f * S + Shadow, LabelScale);
+					DrawTextCentered(Node->GetLabelText(), Node->GetLabelColor(), Screen.X, Screen.Y - 30.f * S, LabelScale);
+				}
+			}
+		}
+	}
 
 	// Top left: run and hamster.
 	const FCRRunNodeData* Current = Run->GetCurrentNode();

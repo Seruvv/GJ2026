@@ -370,7 +370,10 @@ void ACREventHUD::DrawCardSelectScreen(const ACREventGameMode* GM, const FBox2D&
 		const FVector2D Badge = Rect.Min + FVector2D(8.f * S);
 		DrawBox(FBox2D(Badge, Badge + FVector2D(28.f * S)), FLinearColor(0.25f, 0.6f, 1.f));
 		DrawTextCentered(Card ? FString::FromInt(Card->ManaCost) : TEXT("?"), FLinearColor::White, Badge.X + 14.f * S, Badge.Y + 3.f * S, 1.1f * S);
-		DrawTextCentered(Card ? Card->Name : Deck[i].ToString(), EventHudTextColor, Rect.GetCenter().X, Rect.Min.Y + 58.f * S, 1.35f * S);
+		const FString CardName = Card ? Card->Name : Deck[i].ToString();
+		const float NameW = TextWidth(CardName, 1.35f * S);
+		const float NameScale = NameW > CardW - 12.f * S ? 1.35f * S * (CardW - 12.f * S) / NameW : 1.35f * S;
+		DrawTextCentered(CardName, EventHudTextColor, Rect.GetCenter().X, Rect.Min.Y + 58.f * S, NameScale);
 		if (Card)
 		{
 			float LineY = Rect.Min.Y + 92.f * S;

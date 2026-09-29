@@ -1,4 +1,4 @@
-// Authored narrative event data: effects, choices and pool entries. Plain data edited inside Data Assets;
+﻿// Authored narrative event data: effects, choices and pool entries. Plain data edited inside Data Assets;
 // the runtime never branches on a specific event, it only interprets these specs.
 
 #pragma once

@@ -1,4 +1,4 @@
-#include "CRPlayerController.h"
+﻿#include "CRPlayerController.h"
 
 #include "CRCombatGameMode.h"
 #include "CRDebugHUD.h"
@@ -150,7 +150,7 @@ void ACRPlayerController::OnLeftPressed()
 		}
 		else
 		{
-			GM->ShowMessage(TEXT("Not enough mana"));
+			GM->ShowMessage(TEXT("Недостаточно маны"), TEXT("Not enough mana"));
 		}
 		return;
 	}

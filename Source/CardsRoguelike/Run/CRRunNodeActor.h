@@ -28,6 +28,11 @@ public:
 	FName GetNodeId() const { return NodeId; }
 	ECRRoomType GetRoomType() const { return RoomType; }
 
+	/** Label text/color for the current state; drawn flat by the run map HUD so it stays readable. */
+	const FString& GetLabelText() const { return LabelText; }
+	const FLinearColor& GetLabelColor() const { return LabelColor; }
+	FVector GetLabelWorldLocation() const;
+
 private:
 	void SetComponentColor(UStaticMeshComponent* Component, const FLinearColor& Color);
 
@@ -46,6 +51,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "CR|RunMap")
 	TObjectPtr<UTextRenderComponent> Label;
+
+	FString LabelText;
+	FLinearColor LabelColor = FLinearColor::White;
 
 	FName NodeId;
 	ECRRoomType RoomType = ECRRoomType::Combat;

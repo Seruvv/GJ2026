@@ -52,7 +52,8 @@ public:
 	bool IsDebugView() const { return bDebugView; }
 
 	/** Short player-facing message shown under the turn panel for a few seconds. */
-	void ShowMessage(const FString& Message);
+	/** Shows a short player-facing (Russian) message; LogMessage, if given, is the English log line. */
+	void ShowMessage(const FString& Message, const FString& LogMessage = FString());
 	FString GetActiveMessage() const;
 
 	// Combat events
