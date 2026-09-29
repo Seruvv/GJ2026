@@ -1,4 +1,4 @@
-#include "CRRunTypes.h"
+﻿#include "CRRunTypes.h"
 
 namespace CRRun
 {
@@ -19,12 +19,11 @@ namespace CRRun
 	const TArray<FString>& MerchantLines()
 	{
 		static const TArray<FString> Lines = {
-			TEXT("Take a look."),
-			TEXT("Spend wisely."),
-			TEXT("Everything has a price."),
-			TEXT("Need something?"),
-			TEXT("I've seen worse decks."),
-			TEXT("Don't take all day."),
+			TEXT("Что-нибудь нужно?"),
+			TEXT("Покупаешь или просто смотришь?"),
+			TEXT("Монеты вперёд."),
+			TEXT("Трогать можно. Бесплатно — нельзя."),
+			TEXT("Есть товар. Есть цена."),
 		};
 		return Lines;
 	}

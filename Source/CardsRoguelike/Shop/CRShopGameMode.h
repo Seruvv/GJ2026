@@ -1,4 +1,4 @@
-// Shop room GameMode: validates the run, loads the persistent shop state, handles purchases and leaving.
+﻿// Shop room GameMode: validates the run, loads the persistent shop state, handles purchases and leaving.
 
 #pragma once
 
@@ -49,6 +49,7 @@ public:
 	ECRShopOfferStatus GetCardStatus(int32 OfferIndex) const;
 	ECRShopOfferStatus GetHealStatus() const;
 	FString GetActiveMessage() const;
+	const ACRShopMerchant* GetMerchant() const { return Merchant; }
 
 	/** Prototype tuning: shop prices are Silver and unrelated to combat mana costs. */
 	UPROPERTY(EditAnywhere, Category = "CR|Shop")
@@ -68,7 +69,8 @@ public:
 
 private:
 	UCRRunSubsystem* GetRun() const;
-	void ShowMessage(const FString& Message);
+	/** Shows a player-facing (Russian) message; LogMessage (English) goes to the log instead if given. */
+	void ShowMessage(const FString& Message, const FString& LogMessage = FString());
 	void ReturnToRunMap();
 
 	UPROPERTY()

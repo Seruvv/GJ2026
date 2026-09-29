@@ -1,4 +1,4 @@
-#include "CRShopMerchant.h"
+﻿#include "CRShopMerchant.h"
 
 #include "../Combat/CRTypes.h"
 #include "Components/StaticMeshComponent.h"
@@ -49,6 +49,7 @@ ACRShopMerchant::ACRShopMerchant()
 	DialogueText->SetWorldSize(34.f);
 	DialogueText->SetTextRenderColor(FColor(255, 225, 150));
 	DialogueText->SetRelativeLocation(FVector(0.f, 0.f, 285.f));
+	DialogueText->SetHiddenInGame(true);
 }
 
 void ACRShopMerchant::BeginPlay()
@@ -63,7 +64,12 @@ void ACRShopMerchant::BeginPlay()
 
 void ACRShopMerchant::SetDialogueLine(const FString& Line)
 {
-	DialogueText->SetText(FText::FromString(Line.IsEmpty() ? FString() : FString::Printf(TEXT("\"%s\""), *Line)));
+	DialogueLine = Line;
+}
+
+FVector ACRShopMerchant::GetDialogueWorldLocation() const
+{
+	return DialogueText->GetComponentLocation();
 }
 
 void ACRShopMerchant::Tick(float DeltaSeconds)
@@ -74,5 +80,4 @@ void ACRShopMerchant::Tick(float DeltaSeconds)
 	IdleTime += DeltaSeconds;
 	BodyPivot->SetRelativeLocation(FVector(0.f, 0.f, FMath::Sin(IdleTime * BobSpeed) * BobHeight));
 	BodyPivot->SetRelativeRotation(FRotator(0.f, FMath::Sin(IdleTime * SwaySpeed) * SwayDegrees, 0.f));
-	CRProto::FaceCamera(DialogueText);
 }
