@@ -20,6 +20,17 @@ enum class ECRRoomType : uint8
 	Return
 };
 
+UENUM(BlueprintType)
+enum class ECRRunEndReason : uint8
+{
+	/** The hamster reached the Return. */
+	Completed,
+	/** The hamster died. */
+	Failed,
+	/** The player left the run early. */
+	Abandoned
+};
+
 /** Distinguishes "no run yet" from "a run that ended", so a failed run is not silently replaced. */
 UENUM(BlueprintType)
 enum class ECRRunStatus : uint8
@@ -37,6 +48,25 @@ enum class ECRRunNodeState : uint8
 	Available,
 	Current,
 	Completed
+};
+
+/** Bonuses applied when a run starts (the hub computes them from the profile's building levels). */
+USTRUCT(BlueprintType)
+struct FCRRunStartBonuses
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 BonusMaxHP = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> ExtraCardIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 StartSilver = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 StartFood = 0;
 };
 
 /** One room on the run map. Connections are directed: they list the legal next rooms. */
@@ -222,6 +252,18 @@ struct FCRRunState
 	/** Event state per event node id; independent for every event room of the run. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
 	TMap<FName, FCREventNodeState> EventStates;
+
+	/** Profile this run was started from (empty for developer runs opened straight on the run map). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString ProfileId;
+
+	/** Set once the run's end was reported (OnRunEnded fires exactly once per run). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	bool bEndReported = false;
+
+	/** Why the run ended (valid once bEndReported). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	ECRRunEndReason EndReason = ECRRunEndReason::Completed;
 };
 
 namespace CRRun
@@ -231,6 +273,10 @@ namespace CRRun
 	/** Player-facing (Russian) room type name for the run map UI. */
 	FString RoomTypeDisplayName(ECRRoomType Type);
 	FLinearColor RoomTypeColor(ECRRoomType Type);
+
+	/** Hamster and deck every run starts from (before hub bonuses). */
+	constexpr int32 BaseHamsterMaxHP = 30;
+	inline TArray<FName> StarterDeck() { return { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") }; }
 
 	/** Prototype maps used by the run loop. */
 	inline const TCHAR* RunMapPath() { return TEXT("/Game/Dev/TestMaps/LV_RunMapSandbox"); }

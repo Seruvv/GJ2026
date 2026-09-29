@@ -1,4 +1,4 @@
-// Owns the current run. Lives on the GameInstance, so it survives map changes (run map <-> rooms).
+﻿// Owns the current run. Lives on the GameInstance, so it survives map changes (run map <-> rooms).
 
 #pragma once
 
@@ -11,6 +11,8 @@ class UCREventDefinition;
 struct FCREventChoice;
 
 DECLARE_MULTICAST_DELEGATE(FCROnRunStateChanged);
+/** Fired exactly once when a run ends (Completed, Failed or Abandoned), with the run as it ended. */
+DECLARE_MULTICAST_DELEGATE_OneParam(FCROnRunEnded, const FCRRunState& /*EndedRun*/);
 
 UCLASS()
 class CARDSROGUELIKE_API UCRRunSubsystem : public UGameInstanceSubsystem
@@ -24,7 +26,14 @@ public:
 	/** Development/repro API: a fresh run whose graph is generated from Seed (same seed = same map). */
 	void StartFreshRunWithSeed(int32 Seed);
 
+	/** Starts a new run for a profile (from the hub): random seed plus the hub's run-start bonuses. */
+	void StartProfileRun(const FString& ProfileId, const FCRRunStartBonuses& Bonuses);
+
+	/** Clears the run. A run still in progress is reported as Abandoned first. */
 	void AbandonRun();
+
+	/** True if the run was started from a profile (its end is delivered to that profile). */
+	bool IsProfileRun() const { return !RunState.ProfileId.IsEmpty(); }
 
 	ECRRunStatus GetStatus() const { return RunState.Status; }
 	bool IsRunActive() const { return RunState.Status == ECRRunStatus::Active; }
@@ -104,10 +113,14 @@ public:
 	/** Broadcast whenever the run state changes. */
 	FCROnRunStateChanged OnRunStateChanged;
 
+	FCROnRunEnded OnRunEnded;
+
 private:
 	/** Picks the seed for a normal new run (outside the graph stream). */
 	static int32 MakeRandomRunSeed();
+	void StartRun(int32 Seed, const FCRRunStartBonuses& Bonuses, const FString& ProfileId);
 	void RefreshNodeStates();
+	void ReportRunEnd(ECRRunEndReason Reason);
 
 	/** Mutable state of a shop the hamster is currently standing in (unresolved), or nullptr. */
 	FCRShopState* GetActiveShopState(FName ShopNodeId);

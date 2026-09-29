@@ -51,17 +51,36 @@ void UCRRunSubsystem::StartFreshRun()
 
 void UCRRunSubsystem::StartFreshRunWithSeed(int32 Seed)
 {
+	StartRun(Seed, FCRRunStartBonuses(), FString());
+}
+
+void UCRRunSubsystem::StartProfileRun(const FString& ProfileId, const FCRRunStartBonuses& Bonuses)
+{
+	StartRun(MakeRandomRunSeed(), Bonuses, ProfileId);
+}
+
+void UCRRunSubsystem::StartRun(int32 Seed, const FCRRunStartBonuses& Bonuses, const FString& ProfileId)
+{
 	// A fresh run replaces everything: node progress, shop and event states, hamster, deck, resources.
 	RunState = FCRRunState();
 	RunState.Status = ECRRunStatus::Active;
 	RunState.RunSeed = Seed;
+	RunState.ProfileId = ProfileId;
 
 	RunState.Hamster.Name = TEXT("Test Hamster");
-	RunState.Hamster.MaxHP = 30;
-	RunState.Hamster.CurrentHP = 30;
+	RunState.Hamster.MaxHP = CRRun::BaseHamsterMaxHP + FMath::Max(0, Bonuses.BonusMaxHP);
+	RunState.Hamster.CurrentHP = RunState.Hamster.MaxHP;
 	RunState.Hamster.ManaPerTurn = 3;
 
-	RunState.DeckCardIds = { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") };
+	RunState.DeckCardIds = CRRun::StarterDeck();
+	RunState.DeckCardIds.Append(Bonuses.ExtraCardIds);
+	RunState.Carried.Silver = FMath::Max(0, Bonuses.StartSilver);
+	RunState.Carried.Food = FMath::Max(0, Bonuses.StartFood);
+	if (!ProfileId.IsEmpty())
+	{
+		UE_LOG(LogCRRun, Log, TEXT("Profile run for %s: max HP %d, deck %d cards (+%d), start Silver %d, Food %d"), *ProfileId,
+			RunState.Hamster.MaxHP, RunState.DeckCardIds.Num(), Bonuses.ExtraCardIds.Num(), RunState.Carried.Silver, RunState.Carried.Food);
+	}
 
 	// The graph is generated exactly once per run; room maps and returns only read it.
 	const FCRRunGenerationResult Generated = CRRunGen::Generate(Seed);
@@ -96,6 +115,11 @@ void UCRRunSubsystem::StartFreshRunWithSeed(int32 Seed)
 
 void UCRRunSubsystem::AbandonRun()
 {
+	// Leaving a run that is still in progress ends it; a finished run was already reported.
+	if (IsRunActive())
+	{
+		ReportRunEnd(ECRRunEndReason::Abandoned);
+	}
 	RunState = FCRRunState();
 	UE_LOG(LogCRRun, Log, TEXT("Run abandoned"));
 	OnRunStateChanged.Broadcast();
@@ -509,10 +533,36 @@ bool UCRRunSubsystem::CompleteCurrentRoom()
 	}
 
 	RunState.bCurrentRoomResolved = true;
+	// Reaching the Return completes the run (the route has no further rooms).
+	const FCRRunNodeData* Current = GetCurrentNode();
+	const bool bReachedReturn = Current && Current->RoomType == ECRRoomType::Return;
+	if (bReachedReturn)
+	{
+		RunState.Status = ECRRunStatus::Completed;
+	}
 	RefreshNodeStates();
 	UE_LOG(LogCRRun, Log, TEXT("Room %s resolved (HP %d/%d)"), *RunState.CurrentNodeId.ToString(), RunState.Hamster.CurrentHP, RunState.Hamster.MaxHP);
+	if (bReachedReturn)
+	{
+		UE_LOG(LogCRRun, Log, TEXT("Run completed: reached the Return"));
+		ReportRunEnd(ECRRunEndReason::Completed);
+	}
 	OnRunStateChanged.Broadcast();
 	return true;
+}
+
+void UCRRunSubsystem::ReportRunEnd(ECRRunEndReason Reason)
+{
+	if (RunState.bEndReported)
+	{
+		return;
+	}
+	RunState.bEndReported = true;
+	RunState.EndReason = Reason;
+	UE_LOG(LogCRRun, Log, TEXT("Run end reported: %s (carried Silver %d, Food %d, Wood %d, profile %s)"),
+		*UEnum::GetValueAsString(Reason), RunState.Carried.Silver, RunState.Carried.Food, RunState.Carried.Wood,
+		RunState.ProfileId.IsEmpty() ? TEXT("none") : *RunState.ProfileId);
+	OnRunEnded.Broadcast(RunState);
 }
 
 void UCRRunSubsystem::FailCurrentRun()
@@ -525,6 +575,7 @@ void UCRRunSubsystem::FailCurrentRun()
 	RunState.Status = ECRRunStatus::Failed;
 	RefreshNodeStates();
 	UE_LOG(LogCRRun, Log, TEXT("Run failed in room %s"), *RunState.CurrentNodeId.ToString());
+	ReportRunEnd(ECRRunEndReason::Failed);
 	OnRunStateChanged.Broadcast();
 }
 
