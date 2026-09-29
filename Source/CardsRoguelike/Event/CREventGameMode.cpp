@@ -115,7 +115,7 @@ FString ACREventGameMode::GetChoiceBlockReason(int32 ChoiceIndex) const
 	const UCRRunSubsystem* Run = GetRun();
 	if (!Run || !Event || !Event->Choices.IsValidIndex(ChoiceIndex))
 	{
-		return TEXT("Unavailable");
+		return TEXT("Недоступно");
 	}
 	return Run->GetEventChoiceBlockReason(Event->Choices[ChoiceIndex]);
 }

@@ -1,4 +1,4 @@
-// Persistent run data types. Plain data only: no actor references, so the state survives map changes.
+﻿// Persistent run data types. Plain data only: no actor references, so the state survives map changes.
 
 #pragma once
 
@@ -50,6 +50,10 @@ struct FCRRunNodeData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
 	ECRRoomType RoomType = ECRRoomType::Combat;
+
+	/** Column of the run graph (0 = Start). Edges only ever lead to the next layer. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	int32 Layer = 0;
 
 	/** Position on the 3D run map (visualization only). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
@@ -177,6 +181,10 @@ struct FCRRunState
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
 	ECRRunStatus Status = ECRRunStatus::NotStarted;
 
+	/** Seed the run graph was generated from; the same seed always rebuilds the same map. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 RunSeed = 0;
+
 	/**
 	 * Whether the room at CurrentNodeId has been resolved (e.g. its combat won).
 	 * Outgoing rooms only become Available once the current room is resolved.
@@ -218,7 +226,10 @@ struct FCRRunState
 
 namespace CRRun
 {
+	/** English room type name for logs, diagnostics and graph signatures. */
 	FString RoomTypeName(ECRRoomType Type);
+	/** Player-facing (Russian) room type name for the run map UI. */
+	FString RoomTypeDisplayName(ECRRoomType Type);
 	FLinearColor RoomTypeColor(ECRRoomType Type);
 
 	/** Prototype maps used by the run loop. */

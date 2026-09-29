@@ -18,8 +18,12 @@ class CARDSROGUELIKE_API UCRRunSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	/** Starts the deterministic test run: test hamster, starter deck, fixed graph. */
-	void StartPrototypeRun();
+	/** Starts a new run (test hamster, starter deck) on a freshly generated map from a new random seed. */
+	void StartFreshRun();
+
+	/** Development/repro API: a fresh run whose graph is generated from Seed (same seed = same map). */
+	void StartFreshRunWithSeed(int32 Seed);
+
 	void AbandonRun();
 
 	ECRRunStatus GetStatus() const { return RunState.Status; }
@@ -101,7 +105,8 @@ public:
 	FCROnRunStateChanged OnRunStateChanged;
 
 private:
-	void BuildPrototypeGraph();
+	/** Picks the seed for a normal new run (outside the graph stream). */
+	static int32 MakeRandomRunSeed();
 	void RefreshNodeStates();
 
 	/** Mutable state of a shop the hamster is currently standing in (unresolved), or nullptr. */

@@ -1,4 +1,4 @@
-#include "CRShopGameMode.h"
+﻿#include "CRShopGameMode.h"
 
 #include "../Combat/CRCardLibrary.h"
 #include "../Run/CRRunSubsystem.h"
@@ -48,7 +48,7 @@ void ACRShopGameMode::StartPlay()
 	if (!bValidShop)
 	{
 		UE_LOG(LogCRShop, Log, TEXT("Shop sandbox opened without an active shop room"));
-		Merchant->SetDialogueLine(TEXT("Nobody's shopping today."));
+		Merchant->SetDialogueLine(TEXT("Сегодня торговли нет."));
 		return;
 	}
 
@@ -129,7 +129,7 @@ void ACRShopGameMode::BuyCard(int32 OfferIndex)
 	const ECRShopOfferStatus Status = GetCardStatus(OfferIndex);
 	if (Status == ECRShopOfferStatus::NotEnoughSilver)
 	{
-		ShowMessage(TEXT("Not enough Silver"));
+		ShowMessage(TEXT("Недостаточно серебра"), TEXT("Not enough Silver"));
 		return;
 	}
 	if (Status != ECRShopOfferStatus::Available)
@@ -142,7 +142,8 @@ void ACRShopGameMode::BuyCard(int32 OfferIndex)
 	{
 		const FCRShopState* Shop = GetShopState();
 		const FCRCardDef* Card = Shop ? CRCardLibrary::FindCard(Shop->OfferCardIds[OfferIndex]) : nullptr;
-		ShowMessage(FString::Printf(TEXT("Bought %s"), Card ? *Card->Name : TEXT("card")));
+		ShowMessage(FString::Printf(TEXT("Куплено: %s"), Card ? *Card->Name : TEXT("карта")),
+			FString::Printf(TEXT("Bought %s"), Card ? *Card->Id.ToString() : TEXT("card")));
 	}
 }
 
@@ -151,12 +152,17 @@ void ACRShopGameMode::BuyHeal()
 	const ECRShopOfferStatus Status = GetHealStatus();
 	if (Status == ECRShopOfferStatus::NotEnoughSilver)
 	{
-		ShowMessage(TEXT("Not enough Silver"));
+		ShowMessage(TEXT("Недостаточно серебра"), TEXT("Not enough Silver"));
 		return;
 	}
 	if (Status == ECRShopOfferStatus::FullHP)
 	{
-		ShowMessage(TEXT("Already at full HP"));
+		ShowMessage(TEXT("Здоровье уже полное"), TEXT("Already at full HP"));
+		return;
+	}
+	if (Status == ECRShopOfferStatus::Sold)
+	{
+		ShowMessage(TEXT("Лечение уже куплено"), TEXT("Heal already purchased"));
 		return;
 	}
 	if (Status != ECRShopOfferStatus::Available)
@@ -168,7 +174,7 @@ void ACRShopGameMode::BuyHeal()
 	const int32 Before = GetHP();
 	if (Run && Run->BuyShopHeal(ShopNodeId, HealPrice, HealAmount))
 	{
-		ShowMessage(FString::Printf(TEXT("Healed %d -> %d"), Before, GetHP()));
+		ShowMessage(FString::Printf(TEXT("Здоровье +%d (%d / %d)"), GetHP() - Before, GetHP(), GetMaxHP()), FString::Printf(TEXT("Healed %d -> %d"), Before, GetHP()));
 	}
 }
 
@@ -186,7 +192,7 @@ void ACRShopGameMode::LeaveShop()
 		Run->CompleteCurrentRoom();
 	}
 	UE_LOG(LogCRShop, Log, TEXT("Left shop %s"), *ShopNodeId.ToString());
-	ShowMessage(TEXT("Leaving the shop..."));
+	ShowMessage(TEXT("Уходим из лавки..."), TEXT("Leaving the shop..."));
 	GetWorldTimerManager().SetTimer(LeaveTimer, this, &ACRShopGameMode::ReturnToRunMap, FMath::Max(LeaveDelay, 0.01f), false);
 }
 
@@ -195,11 +201,11 @@ void ACRShopGameMode::ReturnToRunMap()
 	UGameplayStatics::OpenLevel(this, FName(CRRun::RunMapPath()));
 }
 
-void ACRShopGameMode::ShowMessage(const FString& InMessage)
+void ACRShopGameMode::ShowMessage(const FString& InMessage, const FString& LogMessage)
 {
 	Message = InMessage;
 	MessageTime = GetWorld()->GetRealTimeSeconds();
-	UE_LOG(LogCRShop, Log, TEXT("%s"), *InMessage);
+	UE_LOG(LogCRShop, Log, TEXT("%s"), LogMessage.IsEmpty() ? *InMessage : *LogMessage);
 }
 
 FString ACRShopGameMode::GetActiveMessage() const

@@ -1,4 +1,5 @@
-// Placeholder merchant: primitive body with a subtle procedural idle and a world-space dialogue line.
+﻿// Placeholder merchant: primitive body with a subtle procedural idle. Its dialogue line is drawn by the
+// shop HUD (Canvas font supports Cyrillic) at GetDialogueWorldLocation().
 
 #pragma once
 
@@ -20,6 +21,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	void SetDialogueLine(const FString& Line);
+	const FString& GetDialogueLine() const { return DialogueLine; }
+	/** World point above the merchant where the HUD draws the dialogue line. */
+	FVector GetDialogueWorldLocation() const;
 
 	UPROPERTY(EditAnywhere, Category = "CR|Merchant")
 	float BobHeight = 4.f;
@@ -53,8 +57,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "CR|Merchant")
 	TObjectPtr<UStaticMeshComponent> Hat;
 
+	/** Legacy 3D line (its default font has no Cyrillic): hidden in play, kept as the dialogue anchor. */
 	UPROPERTY(VisibleAnywhere, Category = "CR|Merchant")
 	TObjectPtr<UTextRenderComponent> DialogueText;
 
+	FString DialogueLine;
 	float IdleTime = 0.f;
 };

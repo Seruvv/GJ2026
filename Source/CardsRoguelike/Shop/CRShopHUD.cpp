@@ -1,8 +1,9 @@
-#include "CRShopHUD.h"
+﻿#include "CRShopHUD.h"
 
 #include "../Combat/CRCardLibrary.h"
 #include "../Run/CRRunTypes.h"
 #include "CRShopGameMode.h"
+#include "CRShopMerchant.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -45,10 +46,13 @@ void ACRShopHUD::DrawHUD()
 		// Direct sandbox open: show the room, but nothing is for sale and no run data is touched.
 		const float CenterX = Canvas->ClipX * 0.5f;
 		DrawBox(FBox2D(FVector2D(CenterX - 300.f * S, 40.f * S), FVector2D(CenterX + 300.f * S, 150.f * S)), ShopHudPanelColor);
-		DrawTextCentered(TEXT("SHOP SANDBOX"), FLinearColor(1.f, 0.85f, 0.35f), CenterX, 56.f * S, 2.f * S);
-		DrawTextCentered(TEXT("No active Shop room"), ShopHudDimTextColor, CenterX, 104.f * S, 1.3f * S);
+		DrawTextCentered(TEXT("ЛАВКА (ПЕСОЧНИЦА)"), FLinearColor(1.f, 0.85f, 0.35f), CenterX, 56.f * S, 2.f * S);
+		DrawTextCentered(TEXT("Нет активной комнаты лавки"), ShopHudDimTextColor, CenterX, 104.f * S, 1.3f * S);
+		DrawMerchantSpeech(GM, S);
 		return;
 	}
+
+	DrawMerchantSpeech(GM, S);
 
 	DrawStatusPanel(GM, S);
 	DrawOffers(GM, S, Mouse);
@@ -67,18 +71,39 @@ void ACRShopHUD::DrawStatusPanel(const ACRShopGameMode* GM, float S)
 	const float X = 28.f * S;
 	float Y = 24.f * S;
 	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + 300.f * S, Y + 150.f * S)), ShopHudPanelColor);
-	DrawTextAt(TEXT("SHOP"), FLinearColor(1.f, 0.85f, 0.35f), X, Y, 2.0f * S);
+	DrawTextAt(TEXT("ЛАВКА"), FLinearColor(1.f, 0.85f, 0.35f), X, Y, 2.0f * S);
 	Y += 46.f * S;
-	DrawTextAt(FString::Printf(TEXT("Silver: %d"), GM->GetSilver()), ShopHudSilverColor, X, Y, 1.35f * S);
+	DrawTextAt(FString::Printf(TEXT("Серебро: %d"), GM->GetSilver()), ShopHudSilverColor, X, Y, 1.35f * S);
 	Y += 34.f * S;
-	DrawTextAt(FString::Printf(TEXT("HP: %d / %d"), GM->GetHP(), GM->GetMaxHP()), ShopHudTextColor, X, Y, 1.35f * S);
+	DrawTextAt(FString::Printf(TEXT("Здоровье: %d / %d"), GM->GetHP(), GM->GetMaxHP()), ShopHudTextColor, X, Y, 1.35f * S);
 
 	if (const FCRShopState* Shop = GM->GetShopState())
 	{
-		// Merchant line, top centre (the world-space line above the merchant shows the same text).
+		// Merchant line, top centre (the speech drawn above the merchant shows the same text).
 		const float CenterX = Canvas->ClipX * 0.5f;
-		DrawTextCentered(FString::Printf(TEXT("Merchant: \"%s\""), *Shop->MerchantLine), FLinearColor(1.f, 0.9f, 0.65f), CenterX, 30.f * S, 1.3f * S);
+		DrawTextCentered(FString::Printf(TEXT("Торговец: «%s»"), *Shop->MerchantLine), FLinearColor(1.f, 0.9f, 0.65f), CenterX, 30.f * S, 1.3f * S);
 	}
+}
+
+void ACRShopHUD::DrawMerchantSpeech(const ACRShopGameMode* GM, float S)
+{
+	// Drawn on the Canvas (Cyrillic-capable font) at the merchant's projected dialogue point; the merchant's
+	// old 3D TextRender uses the default distance-field font, which has no Cyrillic glyphs.
+	const ACRShopMerchant* Merchant = GM->GetMerchant();
+	if (!Merchant || Merchant->GetDialogueLine().IsEmpty())
+	{
+		return;
+	}
+	const FVector Screen = Project(Merchant->GetDialogueWorldLocation());
+	if (Screen.Z <= 0.f)
+	{
+		return;
+	}
+	const FString Line = FString::Printf(TEXT("«%s»"), *Merchant->GetDialogueLine());
+	const float Scale = FitScale(Line, 2.0f * S, Canvas->ClipX * 0.6f);
+	const float Offset = FMath::Max(1.f, 2.f * S);
+	DrawTextCentered(Line, FLinearColor(0.f, 0.f, 0.f, 0.85f), Screen.X + Offset, Screen.Y - 16.f * S + Offset, Scale);
+	DrawTextCentered(Line, FLinearColor(1.f, 0.88f, 0.59f), Screen.X, Screen.Y - 16.f * S, Scale);
 }
 
 void ACRShopHUD::DrawOffers(const ACRShopGameMode* GM, float S, const FVector2D& Mouse)
@@ -135,11 +160,11 @@ void ACRShopHUD::DrawOffers(const ACRShopGameMode* GM, float S, const FVector2D&
 			DrawTextCentered(Shop->OfferCardIds[i].ToString(), NameColor, CenterX, Rect.Min.Y + 60.f * S, 1.4f * S);
 		}
 
-		DrawTextCentered(FString::Printf(TEXT("%d Silver"), GM->CardPrice), bAvailable ? ShopHudSilverColor : ShopHudDimTextColor, CenterX, Rect.Max.Y - 72.f * S, 1.3f * S);
+		DrawTextCentered(FString::Printf(TEXT("%d серебра"), GM->CardPrice), bAvailable ? ShopHudSilverColor : ShopHudDimTextColor, CenterX, Rect.Max.Y - 72.f * S, 1.3f * S);
 		const FString Label = StatusLabel(Status);
 		if (!Label.IsEmpty())
 		{
-			DrawTextCentered(Label, Status == ECRShopOfferStatus::Sold ? ShopHudGoodColor : ShopHudBadColor, CenterX, Rect.Max.Y - 42.f * S, 1.2f * S);
+			DrawTextCentered(Label, Status == ECRShopOfferStatus::Sold ? ShopHudGoodColor : ShopHudBadColor, CenterX, Rect.Max.Y - 42.f * S, FitScale(Label, 1.2f * S, CardW - 14.f * S));
 		}
 		DrawTextCentered(FString::Printf(TEXT("[%d]"), i + 1), ShopHudDimTextColor, CenterX, Rect.Max.Y - 20.f * S, 0.9f * S);
 	}
@@ -163,12 +188,12 @@ void ACRShopHUD::DrawHeal(const ACRShopGameMode* GM, float S, const FVector2D& M
 	DrawFrame(HealRect, bHovered ? FLinearColor::White : (bAvailable ? ShopHudGoodColor : FLinearColor(0.22f, 0.22f, 0.24f)), 3.f * S);
 
 	const float CenterX = HealRect.GetCenter().X;
-	DrawTextCentered(FString::Printf(TEXT("HEAL +%d HP"), GM->HealAmount), bAvailable ? ShopHudTextColor : ShopHudDimTextColor, CenterX, HealRect.Min.Y + 16.f * S, 1.45f * S);
-	DrawTextCentered(FString::Printf(TEXT("%d Silver"), GM->HealPrice), bAvailable ? ShopHudSilverColor : ShopHudDimTextColor, CenterX, HealRect.Min.Y + 56.f * S, 1.3f * S);
+	DrawTextCentered(FString::Printf(TEXT("ЛЕЧЕНИЕ +%d"), GM->HealAmount), bAvailable ? ShopHudTextColor : ShopHudDimTextColor, CenterX, HealRect.Min.Y + 16.f * S, 1.45f * S);
+	DrawTextCentered(FString::Printf(TEXT("%d серебра"), GM->HealPrice), bAvailable ? ShopHudSilverColor : ShopHudDimTextColor, CenterX, HealRect.Min.Y + 56.f * S, 1.3f * S);
 	const FString Label = StatusLabel(Status);
 	if (!Label.IsEmpty())
 	{
-		DrawTextCentered(Label, Status == ECRShopOfferStatus::Sold ? ShopHudGoodColor : ShopHudBadColor, CenterX, HealRect.Min.Y + 90.f * S, 1.2f * S);
+		DrawTextCentered(Label, Status == ECRShopOfferStatus::Sold ? ShopHudGoodColor : ShopHudBadColor, CenterX, HealRect.Min.Y + 90.f * S, FitScale(Label, 1.2f * S, Size.X - 14.f * S));
 	}
 	DrawTextCentered(TEXT("[4]"), ShopHudDimTextColor, CenterX, HealRect.Max.Y - 22.f * S, 0.9f * S);
 }
@@ -183,8 +208,9 @@ void ACRShopHUD::DrawLeave(const ACRShopGameMode* GM, float S, const FVector2D& 
 	const bool bHovered = bActive && LeaveRect.IsInside(Mouse);
 	DrawBox(LeaveRect, bActive ? (bHovered ? FLinearColor(0.55f, 0.35f, 0.15f, 0.95f) : FLinearColor(0.42f, 0.26f, 0.1f, 0.92f)) : FLinearColor(0.08f, 0.08f, 0.09f, 0.8f));
 	DrawFrame(LeaveRect, bHovered ? FLinearColor::White : FLinearColor(0.9f, 0.7f, 0.4f), 3.f * S);
-	DrawTextCentered(TEXT("LEAVE SHOP"), bActive ? ShopHudTextColor : ShopHudDimTextColor, LeaveRect.GetCenter().X, Min.Y + 8.f * S, 1.5f * S);
-	DrawTextCentered(TEXT("Space"), ShopHudDimTextColor, LeaveRect.GetCenter().X, Min.Y + 38.f * S, 1.0f * S);
+	const FString LeaveText = TEXT("УЙТИ ИЗ ЛАВКИ");
+	DrawTextCentered(LeaveText, bActive ? ShopHudTextColor : ShopHudDimTextColor, LeaveRect.GetCenter().X, Min.Y + 8.f * S, FitScale(LeaveText, 1.5f * S, Size.X - 16.f * S));
+	DrawTextCentered(TEXT("Пробел"), ShopHudDimTextColor, LeaveRect.GetCenter().X, Min.Y + 38.f * S, 1.0f * S);
 }
 
 ECRShopHitTarget ACRShopHUD::HitTest(const FVector2D& ScreenPos) const
@@ -211,9 +237,9 @@ FString ACRShopHUD::StatusLabel(ECRShopOfferStatus Status)
 {
 	switch (Status)
 	{
-	case ECRShopOfferStatus::Sold:            return TEXT("SOLD");
-	case ECRShopOfferStatus::NotEnoughSilver: return TEXT("Not enough Silver");
-	case ECRShopOfferStatus::FullHP:          return TEXT("Full HP");
+	case ECRShopOfferStatus::Sold:            return TEXT("ПРОДАНО");
+	case ECRShopOfferStatus::NotEnoughSilver: return TEXT("Недостаточно серебра");
+	case ECRShopOfferStatus::FullHP:          return TEXT("Здоровье уже полное");
 	default:                                  return FString();
 	}
 }

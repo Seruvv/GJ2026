@@ -99,6 +99,9 @@ private:
 
 	FDelegateHandle RunStateChangedHandle;
 	FName DisplayedNodeId;
+
+	/** Seed of the run the map was built for; a different seed means a new graph to rebuild. */
+	int32 BuiltRunSeed = 0;
 	FName HoveredNodeId;
 	FString ArrivalTitle;
 	FString ArrivalSubtitle;

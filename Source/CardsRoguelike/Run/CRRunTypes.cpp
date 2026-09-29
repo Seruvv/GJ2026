@@ -1,4 +1,4 @@
-#include "CRRunTypes.h"
+﻿#include "CRRunTypes.h"
 
 namespace CRRun
 {
@@ -16,15 +16,28 @@ namespace CRRun
 		return TEXT("?");
 	}
 
+	FString RoomTypeDisplayName(ECRRoomType Type)
+	{
+		switch (Type)
+		{
+		case ECRRoomType::Start:  return TEXT("НАЧАЛО");
+		case ECRRoomType::Combat: return TEXT("БОЙ");
+		case ECRRoomType::Shop:   return TEXT("ЛАВКА");
+		case ECRRoomType::Event:  return TEXT("СОБЫТИЕ");
+		case ECRRoomType::Boss:   return TEXT("БОСС");
+		case ECRRoomType::Return: return TEXT("ВОЗВРАЩЕНИЕ");
+		}
+		return TEXT("?");
+	}
+
 	const TArray<FString>& MerchantLines()
 	{
 		static const TArray<FString> Lines = {
-			TEXT("Take a look."),
-			TEXT("Spend wisely."),
-			TEXT("Everything has a price."),
-			TEXT("Need something?"),
-			TEXT("I've seen worse decks."),
-			TEXT("Don't take all day."),
+			TEXT("Что-нибудь нужно?"),
+			TEXT("Покупаешь или просто смотришь?"),
+			TEXT("Монеты вперёд."),
+			TEXT("Трогать можно. Бесплатно — нельзя."),
+			TEXT("Есть товар. Есть цена."),
 		};
 		return Lines;
 	}

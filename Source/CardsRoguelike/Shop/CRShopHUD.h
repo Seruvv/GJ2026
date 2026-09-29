@@ -1,4 +1,4 @@
-// Prototype shop HUD on the canvas: Silver/HP, three card offers, heal service, merchant line, Leave.
+﻿// Prototype shop HUD on the canvas: Silver/HP, three card offers, heal service, merchant line, Leave.
 
 #pragma once
 
@@ -35,6 +35,8 @@ private:
 	void DrawOffers(const ACRShopGameMode* GM, float S, const FVector2D& Mouse);
 	void DrawHeal(const ACRShopGameMode* GM, float S, const FVector2D& Mouse);
 	void DrawLeave(const ACRShopGameMode* GM, float S, const FVector2D& Mouse);
+	/** Merchant dialogue as Canvas text over the merchant (same line as the top HUD line). */
+	void DrawMerchantSpeech(const ACRShopGameMode* GM, float S);
 
 	void DrawBox(const FBox2D& Box, const FLinearColor& Fill);
 	void DrawFrame(const FBox2D& Box, const FLinearColor& Color, float Thickness);

@@ -93,7 +93,7 @@ void ACRRunMapPlayerController::OnRestartRun()
 	if (UCRRunSubsystem* Run = GetRunSubsystem())
 	{
 		Run->AbandonRun();
-		Run->StartPrototypeRun();
+		Run->StartFreshRun();
 	}
 }
 

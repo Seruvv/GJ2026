@@ -1,4 +1,4 @@
-#include "CRRunNodeActor.h"
+﻿#include "CRRunNodeActor.h"
 
 #include "../Combat/CRTypes.h"
 #include "Components/StaticMeshComponent.h"
@@ -73,7 +73,7 @@ void ACRRunNodeActor::Tick(float DeltaSeconds)
 void ACRRunNodeActor::SetVisualState(ECRRunNodeState InState, bool bHovered)
 {
 	const FLinearColor Base = CRRun::RoomTypeColor(RoomType);
-	FString Text = CRRun::RoomTypeName(RoomType);
+	FString Text = CRRun::RoomTypeDisplayName(RoomType);
 	FLinearColor PedestalColor = Base;
 	FLinearColor HaloColor = FLinearColor::Black;
 	FColor StateLabelColor = FColor::White;
@@ -102,7 +102,8 @@ void ACRRunNodeActor::SetVisualState(ECRRunNodeState InState, bool bHovered)
 	case ECRRunNodeState::Completed:
 		PedestalColor = FMath::Lerp(Base, FLinearColor(0.35f, 0.35f, 0.35f), 0.7f) * 0.5f;
 		StateLabelColor = FColor(205, 205, 210);
-		Text += TEXT("  (done)");
+		// Short completed mark: "(пройдено)" would collide with neighbouring labels (e.g. БОСС / ВОЗВРАЩЕНИЕ).
+		Text += TEXT(" ✓");
 		break;
 	}
 

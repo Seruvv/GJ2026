@@ -139,11 +139,13 @@ void ACRRunMapActor::RebuildMap()
 	{
 		Marker->SetVisibility(false);
 		DisplayedNodeId = NAME_None;
+		BuiltRunSeed = 0;
 		return;
 	}
 
 	const FCRRunState& State = Run->GetRunState();
 	const FVector Origin = GetActorLocation();
+	BuiltRunSeed = State.RunSeed;
 
 	// Diorama base slab under the whole route, and a pillar holding up each pedestal.
 	FBox Bounds(ForceInit);
@@ -210,11 +212,11 @@ void ACRRunMapActor::RebuildMap()
 	const FCRRunNodeData* CurrentNode = Run->GetCurrentNode();
 	if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Combat)
 	{
-		ArrivalTitle = TEXT("COMBAT CLEARED");
+		ArrivalTitle = TEXT("БОЙ ВЫИГРАН");
 	}
 	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Shop)
 	{
-		ArrivalTitle = TEXT("LEFT THE SHOP");
+		ArrivalTitle = TEXT("ЛАВКА ПОКИНУТА");
 	}
 	else if (Run->IsRunActive() && State.bCurrentRoomResolved && CurrentNode && CurrentNode->RoomType == ECRRoomType::Event)
 	{
@@ -259,9 +261,9 @@ FVector ACRRunMapActor::GetMarkerRestLocation(FName NodeId) const
 void ACRRunMapActor::OnRunStateChanged()
 {
 	const UCRRunSubsystem* Run = GetRunSubsystem();
-	if (!Run || !Run->HasRun() || NodeActors.Num() != Run->GetRunState().Nodes.Num())
+	if (!Run || !Run->HasRun() || NodeActors.Num() != Run->GetRunState().Nodes.Num() || BuiltRunSeed != Run->GetRunState().RunSeed)
 	{
-		// Run started, restarted or abandoned: rebuild from scratch.
+		// Run started, restarted (possibly with the same node count, e.g. a new seed) or abandoned: rebuild.
 		RebuildMap();
 		return;
 	}
@@ -332,18 +334,18 @@ void ACRRunMapActor::OnMarkerArrived()
 {
 	const UCRRunSubsystem* Run = GetRunSubsystem();
 	const FCRRunNodeData* Node = Run ? Run->GetCurrentNode() : nullptr;
-	ArrivalTitle = Node ? FString::Printf(TEXT("%s ROOM"), *CRRun::RoomTypeName(Node->RoomType)) : FString();
+	ArrivalTitle = Node ? CRRun::RoomTypeDisplayName(Node->RoomType) : FString();
 
 	// Run state already points at the unresolved room; the room's map reads it on load.
 	PendingRoomMap.Reset();
 	if (Run && Run->IsInCombatRoom())
 	{
-		ArrivalSubtitle = TEXT("Entering combat...");
+		ArrivalSubtitle = TEXT("Начинается бой...");
 		PendingRoomMap = CRRun::CombatMapPath();
 	}
 	else if (Run && Run->IsInShopRoom())
 	{
-		ArrivalSubtitle = TEXT("Entering shop...");
+		ArrivalSubtitle = TEXT("Заходим в лавку...");
 		PendingRoomMap = CRRun::ShopMapPath();
 	}
 	else if (Run && Run->IsInEventRoom())
@@ -353,7 +355,7 @@ void ACRRunMapActor::OnMarkerArrived()
 	}
 	else
 	{
-		ArrivalSubtitle = TEXT("Placeholder room - no gameplay yet");
+		ArrivalSubtitle = TEXT("Заглушка — игровой процесс пока не реализован");
 	}
 
 	if (!PendingRoomMap.IsEmpty())
