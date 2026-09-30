@@ -542,8 +542,8 @@ FBox2D ACRHubHUD::DrawOverlayFrame(const FString& Title, const FString& Subtitle
 	DrawButton(BackRect, TEXT("НАЗАД"), ActionBack, FString(), true, ECRUIButtonStyle::Normal, TEXT("в убежище"));
 	const float TitleW = BackRect.Min.X - Panel.Min.X - Pad * 2.f;
 	DrawTextAt(Title, HubTitle, Panel.Min.X + Pad, Panel.Min.Y + 20.f * S, FitScale(Title, 2.2f * S, TitleW));
-	DrawTextAt(Subtitle, HubDim, Panel.Min.X + Pad, Panel.Min.Y + 74.f * S, FitScale(Subtitle, 1.05f * S, TitleW));
-	return FBox2D(FVector2D(Panel.Min.X + Pad, Panel.Min.Y + 118.f * S), FVector2D(Panel.Max.X - Pad, Panel.Max.Y - Pad));
+	DrawTextAt(Subtitle, HubDim, Panel.Min.X + Pad, Panel.Min.Y + 80.f * S, FitScale(Subtitle, 1.8f * S, TitleW));
+	return FBox2D(FVector2D(Panel.Min.X + Pad, Panel.Min.Y + 140.f * S), FVector2D(Panel.Max.X - Pad, Panel.Max.Y - Pad));
 }
 
 void ACRHubHUD::DrawGraveyard(const UCRProfileSubsystem& Profiles)
@@ -557,18 +557,18 @@ void ACRHubHUD::DrawGraveyard(const UCRProfileSubsystem& Profiles)
 	{
 		GraveListRect = FBox2D(ForceInit);
 		DrawWrapped(TEXT("Все хомяки убежища живы. Хомяк, погибший в походе, остаётся здесь навсегда вместе со своей эпитафией."),
-			HubDim, Content.Min.X, Content.Min.Y + 20.f * S, Content.GetSize().X * 0.6f, 1.1f * S);
+			HubText, Content.Min.X, Content.Min.Y + 24.f * S, Content.GetSize().X * 0.75f, 2.f * S);
 		return;
 	}
 
 	// Left: the graves, most recent death first. Right: the selected grave.
-	const float ListW = FMath::Min(460.f * S, Content.GetSize().X * 0.4f);
+	const float ListW = FMath::Min(600.f * S, Content.GetSize().X * 0.38f);
 	GraveListRect = FBox2D(Content.Min, FVector2D(Content.Min.X + ListW, Content.Max.Y));
 	const FBox2D DetailsRect(FVector2D(GraveListRect.Max.X + 24.f * S, Content.Min.Y), Content.Max);
 
-	const float RowH = 96.f * S;
-	const float RowStep = RowH + 8.f * S;
-	const int32 Visible = FMath::Max(1, FMath::FloorToInt((GraveListRect.GetSize().Y - 30.f * S) / RowStep));
+	const float RowH = 140.f * S;
+	const float RowStep = RowH + 10.f * S;
+	const int32 Visible = FMath::Max(1, FMath::FloorToInt((GraveListRect.GetSize().Y - 34.f * S) / RowStep));
 	GraveMaxScroll = FMath::Max(0, Graves.Num() - Visible);
 	GraveScroll = FMath::Clamp(GraveScroll, 0, GraveMaxScroll);
 
@@ -600,16 +600,16 @@ void ACRHubHUD::DrawGraveyard(const UCRProfileSubsystem& Profiles)
 		DrawPortrait(Grave, Portrait, true);
 		const float TextX = Portrait.Max.X + 12.f * S;
 		const float TextW = Rect.Max.X - TextX - 8.f * S;
-		DrawTextAt(Grave.DisplayName, bSelected ? HubTitle : HubText, TextX, Rect.Min.Y + 8.f * S, FitScale(Grave.DisplayName, 1.3f * S, TextW));
+		DrawTextAt(Grave.DisplayName, bSelected ? HubTitle : HubText, TextX, Rect.Min.Y + 12.f * S, FitScale(Grave.DisplayName, 2.f * S, TextW));
 		const FString Cause = CRRun::DeathCauseDisplayText(Grave.Death.DeathCause);
-		DrawTextAt(Cause, HubBad, TextX, Rect.Min.Y + 40.f * S, FitScale(Cause, 1.0f * S, TextW));
+		DrawTextAt(Cause, HubBad, TextX, Rect.Min.Y + 56.f * S, FitScale(Cause, 1.6f * S, TextW));
 		const FString When = Grave.Death.bValid ? Grave.Death.DeathTimestamp.ToString(TEXT("%d.%m.%Y %H:%M")) : FString(TEXT("дата неизвестна"));
-		DrawTextAt(When, HubDim, TextX, Rect.Min.Y + 66.f * S, FitScale(When, 0.9f * S, TextW));
+		DrawTextAt(When, HubDim, TextX, Rect.Min.Y + 96.f * S, FitScale(When, 1.4f * S, TextW));
 	}
 	if (GraveMaxScroll > 0)
 	{
 		DrawTextCentered(FString::Printf(TEXT("%d–%d из %d · колесо мыши"), GraveScroll + 1, FMath::Min(Graves.Num(), GraveScroll + Visible), Graves.Num()),
-			HubDim, GraveListRect.GetCenter().X, GraveListRect.Max.Y - 24.f * S, 0.85f * S);
+			HubDim, GraveListRect.GetCenter().X, GraveListRect.Max.Y - 30.f * S, 1.3f * S);
 	}
 
 	DrawGraveDetails(*Selected, DetailsRect);
@@ -619,26 +619,27 @@ void ACRHubHUD::DrawGraveDetails(const FCRHamsterPersistentState& Hamster, const
 {
 	DrawBox(Panel, FLinearColor(0.06f, 0.055f, 0.06f, 0.95f));
 	DrawFrame(Panel, FLinearColor(0.4f, 0.36f, 0.3f), 2.f * S);
-	const float Pad = 24.f * S;
-	const float PortraitSize = 150.f * S;
+	const float Pad = 28.f * S;
+	const float PortraitSize = 180.f * S;
 	const FBox2D Portrait(Panel.Min + FVector2D(Pad), Panel.Min + FVector2D(Pad + PortraitSize));
 	DrawPortrait(Hamster, Portrait, true);
 
 	// Beside the portrait: who, how, and their base stats.
-	const float X = Portrait.Max.X + 22.f * S;
+	const float X = Portrait.Max.X + 26.f * S;
 	const float W = Panel.Max.X - X - Pad;
 	float Y = Panel.Min.Y + Pad;
-	DrawTextAt(Hamster.DisplayName, HubTitle, X, Y, FitScale(Hamster.DisplayName, 2.f * S, W));
-	Y += 50.f * S;
+	DrawTextAt(Hamster.DisplayName, HubTitle, X, Y, FitScale(Hamster.DisplayName, 3.f * S, W));
+	Y += 72.f * S;
 	const FString Cause = CRRun::DeathCauseDisplayText(Hamster.Death.DeathCause);
-	DrawTextAt(Cause, HubBad, X, Y, FitScale(Cause, 1.3f * S, W));
-	Y += 36.f * S;
-	DrawTextAt(FString::Printf(TEXT("Здоровье %d"), Hamster.BaseMaxHP), HubText, X, Y, 1.1f * S);
-	DrawTextAt(FString::Printf(TEXT("Мана %d"), Hamster.BaseManaPerTurn), HubMana, X + 180.f * S, Y, 1.1f * S);
+	DrawTextAt(Cause, HubBad, X, Y, FitScale(Cause, 2.f * S, W));
+	Y += 52.f * S;
+	const FString HPText = FString::Printf(TEXT("Здоровье %d"), Hamster.BaseMaxHP);
+	DrawTextAt(HPText, HubText, X, Y, 1.8f * S);
+	DrawTextAt(FString::Printf(TEXT("Мана %d"), Hamster.BaseManaPerTurn), HubMana, X + TextWidth(HPText, 1.8f * S) + 44.f * S, Y, 1.8f * S);
 
 	// The death record.
 	const FCRHamsterDeathRecord& Death = Hamster.Death;
-	float LineY = Portrait.Max.Y + 20.f * S;
+	float LineY = Portrait.Max.Y + 24.f * S;
 	const float LineX = Panel.Min.X + Pad;
 	const float LineW = Panel.GetSize().X - Pad * 2.f;
 	TArray<FString> Facts;
@@ -658,17 +659,22 @@ void ACRHubHUD::DrawGraveDetails(const FCRHamsterPersistentState& Hamster, const
 	}
 	for (const FString& Fact : Facts)
 	{
-		LineY = DrawWrapped(Fact, HubText, LineX, LineY, LineW, 1.05f * S) + 2.f * S;
+		LineY = DrawWrapped(Fact, HubText, LineX, LineY, LineW, 1.75f * S) + 4.f * S;
 	}
 
-	// The reveal: the epitaph was written when the hamster was created and is only ever shown here.
-	LineY += 22.f * S;
-	DrawBox(FBox2D(FVector2D(LineX, LineY), FVector2D(LineX + LineW, LineY + 2.f * S)), FLinearColor(0.5f, 0.42f, 0.25f));
-	LineY += 16.f * S;
-	DrawTextAt(TEXT("ЭПИТАФИЯ"), HubTitle, LineX, LineY, 1.4f * S);
-	LineY += 44.f * S;
+	// The reveal: the epitaph was written when the hamster was created and is only ever shown here. It gets its
+	// own framed block filling the rest of the panel.
+	LineY += 20.f * S;
+	const FBox2D EpitaphRect(FVector2D(LineX, LineY), FVector2D(LineX + LineW, FMath::Max(LineY + 150.f * S, Panel.Max.Y - Pad)));
+	DrawBox(EpitaphRect, FLinearColor(0.12f, 0.1f, 0.07f, 0.95f));
+	DrawFrame(EpitaphRect, FLinearColor(0.75f, 0.62f, 0.35f), 2.f * S);
+	const float InnerPad = 22.f * S;
+	float EpitaphY = EpitaphRect.Min.Y + InnerPad;
+	DrawTextAt(TEXT("ЭПИТАФИЯ"), HubTitle, EpitaphRect.Min.X + InnerPad, EpitaphY, 2.2f * S);
+	EpitaphY += 64.f * S;
 	const FString Epitaph = CRMeta::GetRevealedEpitaph(Hamster);
-	DrawWrapped(Epitaph.IsEmpty() ? FString(TEXT("(без эпитафии)")) : FString::Printf(TEXT("«%s»"), *Epitaph), HubEpitaph, LineX, LineY, LineW, 1.35f * S);
+	DrawWrapped(Epitaph.IsEmpty() ? FString(TEXT("(без эпитафии)")) : FString::Printf(TEXT("«%s»"), *Epitaph), HubEpitaph,
+		EpitaphRect.Min.X + InnerPad, EpitaphY, EpitaphRect.GetSize().X - InnerPad * 2.f, 2.2f * S);
 }
 
 void ACRHubHUD::DrawRecruitment(const UCRProfileSubsystem& Profiles)
@@ -689,15 +695,15 @@ void ACRHubHUD::DrawRecruitment(const UCRProfileSubsystem& Profiles)
 	float Top = Content.Min.Y;
 	if (!bCanRecruit)
 	{
-		DrawTextAt(TEXT("В убежище достаточно хомяков."), HubGood, Content.Min.X, Top, 1.4f * S);
-		Top += 50.f * S;
+		DrawTextAt(TEXT("В убежище достаточно хомяков."), HubGood, Content.Min.X, Top, 1.8f * S);
+		Top += 60.f * S;
 	}
 
 	// One card per saved candidate (they are saved, so reopening or restarting shows the same ones).
 	const TArray<FCRHamsterPersistentState>& Candidates = Profile->RecruitCandidates;
 	if (Candidates.Num() == 0)
 	{
-		DrawTextAt(TEXT("Сейчас никто не просится в убежище."), HubDim, Content.Min.X, Top, 1.1f * S);
+		DrawTextAt(TEXT("Сейчас никто не просится в убежище."), HubDim, Content.Min.X, Top, 1.8f * S);
 		return;
 	}
 	const float Gap = 24.f * S;
@@ -715,11 +721,11 @@ void ACRHubHUD::DrawRecruitment(const UCRProfileSubsystem& Profiles)
 			FVector2D(Card.GetCenter().X + PortraitSize * 0.5f, Card.Min.Y + 24.f * S + PortraitSize));
 		DrawPortrait(Candidate, Portrait);
 		float Y = Portrait.Max.Y + 18.f * S;
-		DrawTextCentered(Candidate.DisplayName, HubTitle, Card.GetCenter().X, Y, FitScale(Candidate.DisplayName, 1.7f * S, CardW - 24.f * S));
+		DrawTextCentered(Candidate.DisplayName, HubTitle, Card.GetCenter().X, Y, FitScale(Candidate.DisplayName, 2.2f * S, CardW - 24.f * S));
+		Y += 58.f * S;
+		DrawTextCentered(FString::Printf(TEXT("Здоровье %d"), Candidate.BaseMaxHP), HubText, Card.GetCenter().X, Y, 1.8f * S);
 		Y += 46.f * S;
-		DrawTextCentered(FString::Printf(TEXT("Здоровье %d"), Candidate.BaseMaxHP), HubText, Card.GetCenter().X, Y, 1.2f * S);
-		Y += 32.f * S;
-		DrawTextCentered(FString::Printf(TEXT("Мана %d"), Candidate.BaseManaPerTurn), HubMana, Card.GetCenter().X, Y, 1.2f * S);
+		DrawTextCentered(FString::Printf(TEXT("Мана %d"), Candidate.BaseManaPerTurn), HubMana, Card.GetCenter().X, Y, 1.8f * S);
 
 		// The epitaph already exists but stays secret: only the graveyard reveals it.
 		const FBox2D ButtonRect(FVector2D(Card.Min.X + 16.f * S, Card.Max.Y - 76.f * S), FVector2D(Card.Max.X - 16.f * S, Card.Max.Y - 16.f * S));
