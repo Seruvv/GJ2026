@@ -56,6 +56,15 @@ public:
 	/** Bonuses the next run gets from the active profile's buildings. */
 	FCRRunStartBonuses GetRunStartBonuses() const;
 
+	// Hamsters (active profile)
+
+	/** The living hamster that goes on the next run, or nullptr. */
+	const FCRHamsterPersistentState* GetSelectedHamster() const;
+	/** Selects a living hamster and saves. */
+	bool SelectHamster(FName HamsterId);
+	/** What the next run starts with: the selected hamster's stats plus hub bonuses (for the preview and the run). */
+	bool GetNextRunStartConfig(FCRRunStartConfig& OutConfig) const;
+
 	// Runs
 
 	/** Starts a fresh run for the active profile. The caller then opens the run map. */
@@ -69,8 +78,6 @@ private:
 	bool SaveIndex();
 	bool SaveActiveProfile();
 	FCRProfileSummary* FindSummary(const FString& ProfileId);
-	/** Brings an older or partial save up to date (missing buildings keep their StartLevel implicitly). */
-	void UpgradeProfileData(UCRProfileSaveGame& Profile) const;
 	void RefreshUnlockedFlags();
 	void HandleRunEnded(const FCRRunState& EndedRun);
 

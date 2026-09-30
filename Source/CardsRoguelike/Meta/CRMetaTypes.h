@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Engine/Texture2D.h"
 #include "../Run/CRRunTypes.h"
 #include "CRMetaTypes.generated.h"
 
@@ -156,6 +157,111 @@ public:
 	const FCRHubBuildingLevel* FindLevel(int32 Level) const { return Levels.IsValidIndex(Level - 1) ? &Levels[Level - 1] : nullptr; }
 };
 
+/** Authored template of a hamster a new profile starts with. */
+USTRUCT(BlueprintType)
+struct FCRHamsterDefinition
+{
+	GENERATED_BODY()
+
+	/** Stable id (unique within the roster). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FName HamsterId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FString DisplayName;
+
+	/** Portrait id for future art lookups. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FName AvatarId;
+
+	/** Portrait; when unset the UI draws a tinted placeholder with the initial. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TSoftObjectPtr<UTexture2D> AvatarTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FLinearColor AvatarTint = FLinearColor(0.6f, 0.5f, 0.4f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster", meta = (ClampMin = "1"))
+	int32 BaseMaxHP = 30;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster", meta = (ClampMin = "1"))
+	int32 BaseManaPerTurn = 3;
+
+	/** Written from the start, revealed only when the hamster dies (never shown while alive). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster", meta = (MultiLine = "true"))
+	FString EpitaphText;
+
+	/** Own starting deck; empty = the shared starter deck. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TArray<FName> StartingDeckCardIds;
+};
+
+/** Default hamsters of a new profile (replaceable prototype content). */
+UCLASS(BlueprintType)
+class CARDSROGUELIKE_API UCRHamsterRosterDefinition : public UPrimaryDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TArray<FCRHamsterDefinition> Hamsters;
+};
+
+/** One hamster owned by a profile. Base stats are never changed by hub upgrades (those are derived at run start). */
+USTRUCT(BlueprintType)
+struct FCRHamsterPersistentState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FName HamsterId;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FString DisplayName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FName AvatarId;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TSoftObjectPtr<UTexture2D> AvatarTexture;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FLinearColor AvatarTint = FLinearColor(0.6f, 0.5f, 0.4f);
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	int32 BaseMaxHP = 30;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	int32 BaseManaPerTurn = 3;
+
+	/** Secret while alive; the graveyard (later) reveals it. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FString EpitaphText;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	bool bAlive = true;
+
+	// Future-safe fields (not used by gameplay yet).
+
+	/** Own starting deck; empty = the shared starter deck. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TArray<FName> StartingDeckCardIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TArray<FName> TraitIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TArray<FName> InjuryIds;
+
+	/** Per-hamster counters (runs, kills...). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	TMap<FName, int32> Stats;
+
+	/** Job / retirement state id (None = on the roster). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FName AssignmentId;
+};
+
 /** Everything the hub needs: its buildings and the profile/run economy rules. */
 UCLASS(BlueprintType)
 class CARDSROGUELIKE_API UCRHubCatalog : public UPrimaryDataAsset
@@ -182,6 +288,10 @@ public:
 	/** Share (%) kept when the player leaves a run early. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Economy", meta = (ClampMin = "0", ClampMax = "100"))
 	int32 AbandonedRunKeepPercent = 0;
+
+	/** Hamsters a new (or migrated) profile starts with. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamsters")
+	TObjectPtr<UCRHamsterRosterDefinition> DefaultRoster;
 
 	const UCRHubBuildingDefinition* FindBuilding(FName BuildingId) const;
 };
@@ -231,4 +341,14 @@ namespace CRMeta
 
 	/** Player-facing one-line text of an effect ("+3 к максимальному здоровью"). */
 	FString DescribeEffect(const FCRHubEffect& Effect);
+
+	/** A profile hamster created from its authored definition (alive). */
+	FCRHamsterPersistentState MakeHamster(const FCRHamsterDefinition& Definition);
+
+	/**
+	 * Run start for a hamster: its base stats and deck plus the hub bonuses of these building levels.
+	 * Effective max HP = BaseMaxHP + BonusMaxHP; mana = BaseManaPerTurn.
+	 */
+	FCRRunStartConfig BuildRunStartConfig(const UCRHubCatalog& Catalog, const TMap<FName, int32>& Levels,
+		const FCRHamsterPersistentState& Hamster, const FString& ProfileId);
 }

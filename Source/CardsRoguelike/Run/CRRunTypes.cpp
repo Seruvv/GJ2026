@@ -30,6 +30,29 @@ namespace CRRun
 		return TEXT("?");
 	}
 
+	FCRRunStartConfig MakeDeveloperStartConfig()
+	{
+		FCRRunStartConfig Config;
+		Config.HamsterName = TEXT("Тестовый хомяк");
+		Config.BaseMaxHP = BaseHamsterMaxHP;
+		Config.BaseManaPerTurn = BaseHamsterManaPerTurn;
+		return Config;
+	}
+
+	void ApplyStartConfig(FCRRunState& RunState, const FCRRunStartConfig& Config)
+	{
+		RunState.ProfileId = Config.ProfileId;
+		RunState.Hamster.HamsterId = Config.HamsterId;
+		RunState.Hamster.Name = Config.HamsterName;
+		RunState.Hamster.MaxHP = FMath::Max(1, Config.BaseMaxHP + FMath::Max(0, Config.Bonuses.BonusMaxHP));
+		RunState.Hamster.CurrentHP = RunState.Hamster.MaxHP;
+		RunState.Hamster.ManaPerTurn = FMath::Max(1, Config.BaseManaPerTurn);
+		RunState.DeckCardIds = Config.StartingDeckCardIds.Num() > 0 ? Config.StartingDeckCardIds : StarterDeck();
+		RunState.DeckCardIds.Append(Config.Bonuses.ExtraCardIds);
+		RunState.Carried.Silver = FMath::Max(0, Config.Bonuses.StartSilver);
+		RunState.Carried.Food = FMath::Max(0, Config.Bonuses.StartFood);
+	}
+
 	const TArray<FString>& MerchantLines()
 	{
 		static const TArray<FString> Lines = {

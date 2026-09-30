@@ -35,6 +35,9 @@ public:
 	/** Called by the UI player controller on a left click. Returns true if a button handled it. */
 	bool HandleClick(const FVector2D& ScreenPos);
 
+	/** Mouse wheel (Delta > 0 = up) at ScreenPos. Returns true if handled. */
+	virtual bool HandleScroll(const FVector2D& ScreenPos, float Delta) { return false; }
+
 	/** Short centered feedback line ("Мастерская: уровень 2"), fades after a few seconds. */
 	void ShowMessage(const FString& Message, bool bError = false);
 
@@ -59,6 +62,9 @@ protected:
 	float FitScale(const FString& Text, float Scale, float MaxWidth);
 	/** Word-wrapped text; returns the Y below the last line. */
 	float DrawWrapped(const FString& Text, const FLinearColor& Color, float X, float Y, float MaxWidth, float Scale);
+
+	/** Registers a clickable area drawn by the caller. Returns true if the mouse is over it (and it is enabled). */
+	bool RegisterButton(const FBox2D& Rect, FName Action, const FString& Arg = FString(), bool bEnabled = true);
 
 	/** Draws and registers a button. Returns true if the mouse is over it (and it is enabled). */
 	bool DrawButton(const FBox2D& Rect, const FString& Label, FName Action, const FString& Arg = FString(), bool bEnabled = true,

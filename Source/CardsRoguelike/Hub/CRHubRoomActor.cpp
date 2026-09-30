@@ -11,11 +11,11 @@ namespace
 {
 	// The camera looks along +Y, so screen-right is -X. The scene is offset to +X to leave the right third of
 	// the screen for the details panel.
-	const FVector HubCameraLocation(420.f, -1150.f, 620.f);
+	const FVector HubCameraLocation(330.f, -1150.f, 620.f);
 	const FRotator HubCameraRotation(-20.f, 90.f, 0.f);
 	const float HubFloorRadius = 1250.f;
 	/** Center of the bottle floor (the buildings sit around it, the ribs on its back half). */
-	const FVector HubFloorCenter(650.f, 300.f, 0.f);
+	const FVector HubFloorCenter(600.f, 300.f, 0.f);
 
 	const FLinearColor HubStone(0.32f, 0.3f, 0.27f);
 	const FLinearColor HubDarkStone(0.16f, 0.15f, 0.14f);
@@ -47,17 +47,17 @@ ACRHubRoomActor::ACRHubRoomActor()
 	Camera->SetRelativeLocationAndRotation(HubCameraLocation, HubCameraRotation);
 	Camera->SetFieldOfView(70.f);
 
-	// Anchors: Workshop screen-left, Heart center-back, Storage center-right, all left of the details panel
-	// that covers the right third of the screen.
+	// Anchors: Workshop screen-left, Heart center-back, Storage center-right, all inside the left ~60% of the
+	// screen (the building details and roster panels cover the rest).
 	Anchors.SetNum(3);
 	Anchors[0].Id = HeartAnchor();
-	Anchors[0].Location = FVector(760.f, 450.f, 0.f);
-	Anchors[0].MarkerHeight = 430.f;
+	Anchors[0].Location = FVector(700.f, 450.f, 0.f);
+	Anchors[0].MarkerHeight = 380.f;
 	Anchors[1].Id = WorkshopAnchor();
-	Anchors[1].Location = FVector(1000.f, -60.f, 0.f);
+	Anchors[1].Location = FVector(900.f, -60.f, 0.f);
 	Anchors[1].MarkerHeight = 380.f;
 	Anchors[2].Id = StorageAnchor();
-	Anchors[2].Location = FVector(300.f, -60.f, 0.f);
+	Anchors[2].Location = FVector(380.f, -60.f, 0.f);
 	Anchors[2].MarkerHeight = 300.f;
 }
 

@@ -51,36 +51,24 @@ void UCRRunSubsystem::StartFreshRun()
 
 void UCRRunSubsystem::StartFreshRunWithSeed(int32 Seed)
 {
-	StartRun(Seed, FCRRunStartBonuses(), FString());
+	StartRun(Seed, CRRun::MakeDeveloperStartConfig());
 }
 
-void UCRRunSubsystem::StartProfileRun(const FString& ProfileId, const FCRRunStartBonuses& Bonuses)
+void UCRRunSubsystem::StartProfileRun(const FCRRunStartConfig& Config)
 {
-	StartRun(MakeRandomRunSeed(), Bonuses, ProfileId);
+	StartRun(MakeRandomRunSeed(), Config);
 }
 
-void UCRRunSubsystem::StartRun(int32 Seed, const FCRRunStartBonuses& Bonuses, const FString& ProfileId)
+void UCRRunSubsystem::StartRun(int32 Seed, const FCRRunStartConfig& Config)
 {
 	// A fresh run replaces everything: node progress, shop and event states, hamster, deck, resources.
 	RunState = FCRRunState();
 	RunState.Status = ECRRunStatus::Active;
 	RunState.RunSeed = Seed;
-	RunState.ProfileId = ProfileId;
-
-	RunState.Hamster.Name = TEXT("Test Hamster");
-	RunState.Hamster.MaxHP = CRRun::BaseHamsterMaxHP + FMath::Max(0, Bonuses.BonusMaxHP);
-	RunState.Hamster.CurrentHP = RunState.Hamster.MaxHP;
-	RunState.Hamster.ManaPerTurn = 3;
-
-	RunState.DeckCardIds = CRRun::StarterDeck();
-	RunState.DeckCardIds.Append(Bonuses.ExtraCardIds);
-	RunState.Carried.Silver = FMath::Max(0, Bonuses.StartSilver);
-	RunState.Carried.Food = FMath::Max(0, Bonuses.StartFood);
-	if (!ProfileId.IsEmpty())
-	{
-		UE_LOG(LogCRRun, Log, TEXT("Profile run for %s: max HP %d, deck %d cards (+%d), start Silver %d, Food %d"), *ProfileId,
-			RunState.Hamster.MaxHP, RunState.DeckCardIds.Num(), Bonuses.ExtraCardIds.Num(), RunState.Carried.Silver, RunState.Carried.Food);
-	}
+	CRRun::ApplyStartConfig(RunState, Config);
+	UE_LOG(LogCRRun, Log, TEXT("Run hamster: %s (%s), max HP %d, mana %d, deck %d cards (+%d), start Silver %d, Food %d, profile %s"),
+		*Config.HamsterId.ToString(), *RunState.Hamster.Name, RunState.Hamster.MaxHP, RunState.Hamster.ManaPerTurn, RunState.DeckCardIds.Num(),
+		Config.Bonuses.ExtraCardIds.Num(), RunState.Carried.Silver, RunState.Carried.Food, Config.ProfileId.IsEmpty() ? TEXT("none") : *Config.ProfileId);
 
 	// The graph is generated exactly once per run; room maps and returns only read it.
 	const FCRRunGenerationResult Generated = CRRunGen::Generate(Seed);

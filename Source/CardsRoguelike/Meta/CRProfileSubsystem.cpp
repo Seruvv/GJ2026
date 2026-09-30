@@ -129,6 +129,11 @@ FString UCRProfileSubsystem::CreateProfile(const FString& DisplayName)
 		}
 	}
 
+	// Hamsters: the default roster, with the first one selected.
+	Profile->SaveVersion = CRMeta::CurrentProfileSaveVersion;
+	Profile->bHamsterRosterInitialized = CRMeta::InitializeHamsterRoster(*Profile, GetCatalog());
+	CRMeta::EnsureValidHamsterSelection(*Profile);
+
 	FCRProfileSummary Summary;
 	Summary.ProfileId = ProfileId;
 	Summary.DisplayName = Profile->DisplayName;
@@ -143,8 +148,8 @@ FString UCRProfileSubsystem::CreateProfile(const FString& DisplayName)
 	{
 		return FString();
 	}
-	UE_LOG(LogCRProfile, Log, TEXT("Profile created: %s '%s' (Silver %d, Food %d, Wood %d)"), *ProfileId, *Profile->DisplayName,
-		Profile->Resources.Silver, Profile->Resources.Food, Profile->Resources.Wood);
+	UE_LOG(LogCRProfile, Log, TEXT("Profile created: %s '%s' (Silver %d, Food %d, Wood %d, %d hamsters, selected %s)"), *ProfileId, *Profile->DisplayName,
+		Profile->Resources.Silver, Profile->Resources.Food, Profile->Resources.Wood, Profile->Hamsters.Num(), *Profile->SelectedHamsterId.ToString());
 	OnProfileChanged.Broadcast();
 	return ProfileId;
 }
@@ -161,7 +166,13 @@ bool UCRProfileSubsystem::SelectProfile(const FString& ProfileId)
 		UE_LOG(LogCRProfile, Error, TEXT("Profile %s could not be loaded"), *ProfileId);
 		return false;
 	}
-	UpgradeProfileData(*Profile);
+	const int32 VersionBefore = Profile->SaveVersion;
+	const bool bHadRoster = Profile->bHamsterRosterInitialized;
+	if (CRMeta::MigrateProfile(*Profile, GetCatalog()))
+	{
+		UE_LOG(LogCRProfile, Log, TEXT("Profile %s migrated: version %d -> %d, roster %s (%d hamsters), selected %s"), *ProfileId, VersionBefore,
+			Profile->SaveVersion, bHadRoster ? TEXT("kept") : TEXT("added"), Profile->Hamsters.Num(), *Profile->SelectedHamsterId.ToString());
+	}
 	ActiveProfile = Profile;
 	Index->LastSelectedProfileId = ProfileId;
 	RefreshUnlockedFlags();
@@ -197,13 +208,6 @@ bool UCRProfileSubsystem::DeleteProfile(const FString& ProfileId)
 bool UCRProfileSubsystem::EnsureActiveProfile()
 {
 	return ActiveProfile || (!GetLastSelectedProfileId().IsEmpty() && SelectProfile(GetLastSelectedProfileId()));
-}
-
-void UCRProfileSubsystem::UpgradeProfileData(UCRProfileSaveGame& Profile) const
-{
-	// Version 1 is current. Buildings added after the profile was created simply use their StartLevel
-	// (CRMeta::GetLevel), so no migration is needed for new hub content.
-	Profile.SaveVersion = FMath::Max(Profile.SaveVersion, 1);
 }
 
 void UCRProfileSubsystem::RefreshUnlockedFlags()
@@ -324,10 +328,46 @@ FCRRunStartBonuses UCRProfileSubsystem::GetRunStartBonuses() const
 	return (ActiveProfile && Catalog) ? CRMeta::ComputeRunStartBonuses(*Catalog, ActiveProfile->BuildingLevels) : FCRRunStartBonuses();
 }
 
+const FCRHamsterPersistentState* UCRProfileSubsystem::GetSelectedHamster() const
+{
+	return ActiveProfile ? CRMeta::FindSelectedHamster(*ActiveProfile) : nullptr;
+}
+
+bool UCRProfileSubsystem::SelectHamster(FName HamsterId)
+{
+	const FCRHamsterPersistentState* Hamster = ActiveProfile ? CRMeta::FindHamster(*ActiveProfile, HamsterId) : nullptr;
+	if (!Hamster || !Hamster->bAlive)
+	{
+		return false;
+	}
+	if (ActiveProfile->SelectedHamsterId != HamsterId)
+	{
+		ActiveProfile->SelectedHamsterId = HamsterId;
+		SaveActiveProfile();
+		UE_LOG(LogCRProfile, Log, TEXT("Hamster selected for %s: %s (HP %d, mana %d)"), *ActiveProfile->ProfileId, *HamsterId.ToString(),
+			Hamster->BaseMaxHP, Hamster->BaseManaPerTurn);
+		OnProfileChanged.Broadcast();
+	}
+	return true;
+}
+
+bool UCRProfileSubsystem::GetNextRunStartConfig(FCRRunStartConfig& OutConfig) const
+{
+	const UCRHubCatalog* Catalog = GetCatalog();
+	const FCRHamsterPersistentState* Hamster = GetSelectedHamster();
+	if (!ActiveProfile || !Catalog || !Hamster)
+	{
+		return false;
+	}
+	OutConfig = CRMeta::BuildRunStartConfig(*Catalog, ActiveProfile->BuildingLevels, *Hamster, ActiveProfile->ProfileId);
+	return true;
+}
+
 bool UCRProfileSubsystem::StartRunFromHub()
 {
 	UCRRunSubsystem* Run = GetGameInstance()->GetSubsystem<UCRRunSubsystem>();
-	if (!ActiveProfile || !Run)
+	FCRRunStartConfig Config;
+	if (!ActiveProfile || !Run || !GetNextRunStartConfig(Config))
 	{
 		return false;
 	}
@@ -336,7 +376,7 @@ bool UCRProfileSubsystem::StartRunFromHub()
 	Run->AbandonRun();
 	ActiveProfile->Stats.RunsStarted++;
 	SaveActiveProfile();
-	Run->StartProfileRun(ActiveProfile->ProfileId, GetRunStartBonuses());
+	Run->StartProfileRun(Config);
 	UE_LOG(LogCRProfile, Log, TEXT("Run %d started from the hub for %s"), ActiveProfile->Stats.RunsStarted, *ActiveProfile->ProfileId);
 	return true;
 }

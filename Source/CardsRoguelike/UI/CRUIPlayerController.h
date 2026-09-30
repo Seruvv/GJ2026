@@ -23,4 +23,7 @@ protected:
 
 private:
 	void OnLeftClick();
+	void OnScrollUp();
+	void OnScrollDown();
+	void Scroll(float Delta);
 };

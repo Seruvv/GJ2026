@@ -148,6 +148,36 @@ namespace CRMeta
 		return JoinResources(Resources, true);
 	}
 
+	FCRHamsterPersistentState MakeHamster(const FCRHamsterDefinition& Definition)
+	{
+		FCRHamsterPersistentState Hamster;
+		Hamster.HamsterId = Definition.HamsterId;
+		Hamster.DisplayName = Definition.DisplayName;
+		Hamster.AvatarId = Definition.AvatarId;
+		Hamster.AvatarTexture = Definition.AvatarTexture;
+		Hamster.AvatarTint = Definition.AvatarTint;
+		Hamster.BaseMaxHP = FMath::Max(1, Definition.BaseMaxHP);
+		Hamster.BaseManaPerTurn = FMath::Max(1, Definition.BaseManaPerTurn);
+		Hamster.EpitaphText = Definition.EpitaphText;
+		Hamster.StartingDeckCardIds = Definition.StartingDeckCardIds;
+		Hamster.bAlive = true;
+		return Hamster;
+	}
+
+	FCRRunStartConfig BuildRunStartConfig(const UCRHubCatalog& Catalog, const TMap<FName, int32>& Levels,
+		const FCRHamsterPersistentState& Hamster, const FString& ProfileId)
+	{
+		FCRRunStartConfig Config;
+		Config.ProfileId = ProfileId;
+		Config.HamsterId = Hamster.HamsterId;
+		Config.HamsterName = Hamster.DisplayName;
+		Config.BaseMaxHP = Hamster.BaseMaxHP;
+		Config.BaseManaPerTurn = Hamster.BaseManaPerTurn;
+		Config.StartingDeckCardIds = Hamster.StartingDeckCardIds;
+		Config.Bonuses = ComputeRunStartBonuses(Catalog, Levels);
+		return Config;
+	}
+
 	FString DescribeEffect(const FCRHubEffect& Effect)
 	{
 		switch (Effect.Type)

@@ -67,7 +67,28 @@ namespace
 		Storage->Levels[0].Conversions.Add(Convert);
 
 		Catalog->Buildings = { Heart, Workshop, Storage };
+
+		// Three hamsters with different stats (a tank, a caster, an average one).
+		UCRHamsterRosterDefinition* Roster = NewObject<UCRHamsterRosterDefinition>();
+		const auto AddHamster = [Roster](const TCHAR* Id, const TCHAR* Name, int32 HP, int32 Mana)
+		{
+			FCRHamsterDefinition& Def = Roster->Hamsters.AddDefaulted_GetRef();
+			Def.HamsterId = Id;
+			Def.DisplayName = Name;
+			Def.BaseMaxHP = HP;
+			Def.BaseManaPerTurn = Mana;
+			Def.EpitaphText = FString::Printf(TEXT("Здесь лежит %s."), Name);
+		};
+		AddHamster(TEXT("Tank"), TEXT("Валун"), 36, 2);
+		AddHamster(TEXT("Caster"), TEXT("Искра"), 24, 4);
+		AddHamster(TEXT("Average"), TEXT("Пуговка"), 30, 3);
+		Catalog->DefaultRoster = Roster;
 		return Catalog;
+	}
+
+	UCRProfileSaveGame* MakeMetaTestProfile()
+	{
+		return Cast<UCRProfileSaveGame>(UGameplayStatics::CreateSaveGameObject(UCRProfileSaveGame::StaticClass()));
 	}
 }
 
@@ -195,6 +216,158 @@ bool FCRMetaSaveRoundTripTest::RunTest(const FString& Parameters)
 	}
 	TestTrue(TEXT("deleted"), UGameplayStatics::DeleteGameInSlot(Slot, CRMeta::SaveUserIndex));
 	TestFalse(TEXT("gone after delete"), UGameplayStatics::DoesSaveGameExist(Slot, CRMeta::SaveUserIndex));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRMetaRosterNewProfileTest, "CardsRoguelike.Meta.Hamsters.NewProfileRoster",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRMetaRosterNewProfileTest::RunTest(const FString& Parameters)
+{
+	UCRHubCatalog* Catalog = MakeMetaTestCatalog();
+	UCRProfileSaveGame* Profile = MakeMetaTestProfile();
+	TestTrue(TEXT("A: roster initialized"), CRMeta::InitializeHamsterRoster(*Profile, Catalog));
+	CRMeta::EnsureValidHamsterSelection(*Profile);
+	TestEqual(TEXT("A: every default hamster added"), Profile->Hamsters.Num(), 3);
+
+	TSet<FName> Ids;
+	for (const FCRHamsterPersistentState& Hamster : Profile->Hamsters)
+	{
+		TestFalse(TEXT("B: id is set"), Hamster.HamsterId.IsNone());
+		TestFalse(TEXT("B: id is unique"), Ids.Contains(Hamster.HamsterId));
+		Ids.Add(Hamster.HamsterId);
+		TestTrue(TEXT("new hamsters are alive"), Hamster.bAlive);
+		TestFalse(TEXT("epitaph authored from creation"), Hamster.EpitaphText.IsEmpty());
+	}
+	const FCRHamsterPersistentState* Selected = CRMeta::FindSelectedHamster(*Profile);
+	TestTrue(TEXT("C: a living hamster is selected"), Selected && Selected->bAlive);
+
+	TestFalse(TEXT("roster is only added once"), CRMeta::InitializeHamsterRoster(*Profile, Catalog));
+	TestEqual(TEXT("no duplicates on a second call"), Profile->Hamsters.Num(), 3);
+
+	// An invalid (or dead) selection falls back to the first living hamster.
+	Profile->Hamsters[0].bAlive = false;
+	Profile->SelectedHamsterId = Profile->Hamsters[0].HamsterId;
+	TestTrue(TEXT("dead selection is replaced"), CRMeta::EnsureValidHamsterSelection(*Profile));
+	TestEqual(TEXT("first living hamster selected"), Profile->SelectedHamsterId, Profile->Hamsters[1].HamsterId);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRMetaRosterMigrationTest, "CardsRoguelike.Meta.Hamsters.MigrationAndRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRMetaRosterMigrationTest::RunTest(const FString& Parameters)
+{
+	UCRHubCatalog* Catalog = MakeMetaTestCatalog();
+
+	// A version-1 profile as M2.7 wrote it: progress but no roster.
+	UCRProfileSaveGame* Old = MakeMetaTestProfile();
+	Old->ProfileId = TEXT("AUTOMATION_MIGRATION");
+	Old->Resources = MetaTestRes(15, 8, 1);
+	Old->BuildingLevels.Add(TEXT("Heart"), 2);
+	Old->BuildingLevels.Add(TEXT("Workshop"), 1);
+	Old->Stats.RunsStarted = 3;
+	const FString Slot = CRMeta::ProfileSlot(Old->ProfileId);
+	TestTrue(TEXT("old profile saved"), UGameplayStatics::SaveGameToSlot(Old, Slot, CRMeta::SaveUserIndex));
+
+	UCRProfileSaveGame* Loaded = Cast<UCRProfileSaveGame>(UGameplayStatics::LoadGameFromSlot(Slot, CRMeta::SaveUserIndex));
+	if (!TestNotNull(TEXT("old profile loads"), Loaded))
+	{
+		return false;
+	}
+	TestFalse(TEXT("old save has no roster flag"), Loaded->bHamsterRosterInitialized);
+	TestTrue(TEXT("E: migration changes the profile"), CRMeta::MigrateProfile(*Loaded, Catalog));
+	TestEqual(TEXT("E: roster added"), Loaded->Hamsters.Num(), 3);
+	TestEqual(TEXT("E: silver preserved"), Loaded->Resources.Silver, 15);
+	TestEqual(TEXT("E: food preserved"), Loaded->Resources.Food, 8);
+	TestEqual(TEXT("E: wood preserved"), Loaded->Resources.Wood, 1);
+	TestEqual(TEXT("E: heart level preserved"), Loaded->BuildingLevels.FindRef(TEXT("Heart")), 2);
+	TestEqual(TEXT("E: workshop level preserved"), Loaded->BuildingLevels.FindRef(TEXT("Workshop")), 1);
+	TestEqual(TEXT("stats preserved"), Loaded->Stats.RunsStarted, 3);
+	TestEqual(TEXT("version bumped"), Loaded->SaveVersion, CRMeta::CurrentProfileSaveVersion);
+	TestNotNull(TEXT("migration selects a hamster"), CRMeta::FindSelectedHamster(*Loaded));
+	TestFalse(TEXT("migration runs exactly once"), CRMeta::MigrateProfile(*Loaded, Catalog));
+
+	// D: the selection survives a save/load round trip.
+	Loaded->SelectedHamsterId = TEXT("Caster");
+	TestTrue(TEXT("migrated profile saved"), UGameplayStatics::SaveGameToSlot(Loaded, Slot, CRMeta::SaveUserIndex));
+	const UCRProfileSaveGame* Again = Cast<UCRProfileSaveGame>(UGameplayStatics::LoadGameFromSlot(Slot, CRMeta::SaveUserIndex));
+	if (TestNotNull(TEXT("reloaded"), Again))
+	{
+		TestEqual(TEXT("D: selection persisted"), Again->SelectedHamsterId, FName(TEXT("Caster")));
+		TestTrue(TEXT("roster flag persisted"), Again->bHamsterRosterInitialized);
+		TestEqual(TEXT("roster persisted"), Again->Hamsters.Num(), 3);
+		const FCRHamsterPersistentState* Caster = CRMeta::FindHamster(*Again, TEXT("Caster"));
+		TestTrue(TEXT("hamster stats persisted"), Caster && Caster->BaseMaxHP == 24 && Caster->BaseManaPerTurn == 4);
+		TestTrue(TEXT("epitaph persisted"), Caster && !Caster->EpitaphText.IsEmpty());
+	}
+	UGameplayStatics::DeleteGameInSlot(Slot, CRMeta::SaveUserIndex);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRMetaEffectiveStatsTest, "CardsRoguelike.Meta.Hamsters.EffectiveRunStats",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRMetaEffectiveStatsTest::RunTest(const FString& Parameters)
+{
+	UCRHubCatalog* Catalog = MakeMetaTestCatalog();
+	UCRProfileSaveGame* Profile = MakeMetaTestProfile();
+	CRMeta::InitializeHamsterRoster(*Profile, Catalog);
+	TMap<FName, int32> Levels;
+	Levels.Add(TEXT("Heart"), 2);    // +3 max HP
+	Levels.Add(TEXT("Workshop"), 1); // +1 Guard card
+
+	const FCRHamsterPersistentState& Tank = *CRMeta::FindHamster(*Profile, TEXT("Tank"));
+	const FCRHamsterPersistentState& Caster = *CRMeta::FindHamster(*Profile, TEXT("Caster"));
+
+	FCRRunState TankRun;
+	CRRun::ApplyStartConfig(TankRun, CRMeta::BuildRunStartConfig(*Catalog, Levels, Tank, TEXT("P_TEST")));
+	FCRRunState CasterRun;
+	CRRun::ApplyStartConfig(CasterRun, CRMeta::BuildRunStartConfig(*Catalog, Levels, Caster, TEXT("P_TEST")));
+
+	TestEqual(TEXT("F: effective HP = base + heart bonus"), TankRun.Hamster.MaxHP, 39);
+	TestEqual(TEXT("F: starts at full HP"), TankRun.Hamster.CurrentHP, 39);
+	TestEqual(TEXT("G: mana = hamster base mana"), TankRun.Hamster.ManaPerTurn, 2);
+	TestEqual(TEXT("G: caster mana"), CasterRun.Hamster.ManaPerTurn, 4);
+	TestEqual(TEXT("caster HP = 24 + 3"), CasterRun.Hamster.MaxHP, 27);
+	TestTrue(TEXT("H: different hamsters, different run stats"),
+		TankRun.Hamster.MaxHP != CasterRun.Hamster.MaxHP && TankRun.Hamster.ManaPerTurn != CasterRun.Hamster.ManaPerTurn);
+	TestEqual(TEXT("base HP never overwritten by bonuses"), Tank.BaseMaxHP, 36);
+
+	TestEqual(TEXT("I: run carries the hamster id"), TankRun.Hamster.HamsterId, FName(TEXT("Tank")));
+	TestEqual(TEXT("I: run carries the hamster name"), TankRun.Hamster.Name, FString(TEXT("Валун")));
+	TestEqual(TEXT("I: run carries the profile"), TankRun.ProfileId, FString(TEXT("P_TEST")));
+	TestEqual(TEXT("I: starter deck + workshop card"), TankRun.DeckCardIds.Num(), CRRun::StarterDeck().Num() + 1);
+
+	FCRRunState DevRun;
+	CRRun::ApplyStartConfig(DevRun, CRRun::MakeDeveloperStartConfig());
+	TestTrue(TEXT("developer runs have no profile or hamster id"), DevRun.ProfileId.IsEmpty() && DevRun.Hamster.HamsterId.IsNone());
+	TestEqual(TEXT("developer run uses the base stats"), DevRun.Hamster.MaxHP, CRRun::BaseHamsterMaxHP);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRMetaRosterAssetTest, "CardsRoguelike.Meta.Hamsters.DefaultRosterAsset",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRMetaRosterAssetTest::RunTest(const FString& Parameters)
+{
+	const UCRHubCatalog* Catalog = LoadObject<UCRHubCatalog>(nullptr, CRMeta::HubCatalogPath());
+	if (!TestNotNull(TEXT("catalog"), Catalog) || !TestNotNull(TEXT("catalog references a default roster"), Catalog->DefaultRoster.Get()))
+	{
+		return false;
+	}
+	const TArray<FCRHamsterDefinition>& Hamsters = Catalog->DefaultRoster->Hamsters;
+	TestTrue(TEXT("about six prototype hamsters"), Hamsters.Num() >= 6);
+	TSet<FName> Ids;
+	TSet<int32> HPs;
+	TSet<int32> Manas;
+	for (const FCRHamsterDefinition& Def : Hamsters)
+	{
+		TestFalse(TEXT("unique id"), Def.HamsterId.IsNone() || Ids.Contains(Def.HamsterId));
+		Ids.Add(Def.HamsterId);
+		TestFalse(TEXT("has a name"), Def.DisplayName.IsEmpty());
+		TestFalse(TEXT("has an epitaph"), Def.EpitaphText.IsEmpty());
+		HPs.Add(Def.BaseMaxHP);
+		Manas.Add(Def.BaseManaPerTurn);
+	}
+	TestTrue(TEXT("HP varies across the roster"), HPs.Num() > 2);
+	TestTrue(TEXT("mana varies across the roster"), Manas.Num() > 1);
 	return true;
 }
 

@@ -136,6 +136,20 @@ public:
 
 	UPROPERTY(VisibleAnywhere, Category = "Profile")
 	FCRRunEndSummary LastRun;
+
+	// Version 2: hamster roster.
+
+	/** Set once the default roster was given to this profile (at creation, or when migrating a version 1 save). */
+	UPROPERTY(VisibleAnywhere, Category = "Profile")
+	bool bHamsterRosterInitialized = false;
+
+	/** Every hamster the profile owns, living or dead. */
+	UPROPERTY(VisibleAnywhere, Category = "Profile")
+	TArray<FCRHamsterPersistentState> Hamsters;
+
+	/** The living hamster that goes on the next run. */
+	UPROPERTY(VisibleAnywhere, Category = "Profile")
+	FName SelectedHamsterId;
 };
 
 namespace CRMeta
@@ -143,4 +157,23 @@ namespace CRMeta
 	inline const TCHAR* ProfileIndexSlot() { return TEXT("CR_ProfileIndex"); }
 	inline FString ProfileSlot(const FString& ProfileId) { return FString(TEXT("CR_Profile_")) + ProfileId; }
 	constexpr int32 SaveUserIndex = 0;
+	/** Profile save version written by this build. */
+	constexpr int32 CurrentProfileSaveVersion = 2;
+
+	FCRHamsterPersistentState* FindHamster(UCRProfileSaveGame& Profile, FName HamsterId);
+	const FCRHamsterPersistentState* FindHamster(const UCRProfileSaveGame& Profile, FName HamsterId);
+	/** The selected hamster if it is alive, otherwise nullptr. */
+	const FCRHamsterPersistentState* FindSelectedHamster(const UCRProfileSaveGame& Profile);
+
+	/** Gives the profile the catalog's default roster if it has none yet. Returns true if hamsters were added. */
+	bool InitializeHamsterRoster(UCRProfileSaveGame& Profile, const UCRHubCatalog* Catalog);
+
+	/** Makes SelectedHamsterId point at a living hamster (the first one if it is invalid). Returns true if it changed. */
+	bool EnsureValidHamsterSelection(UCRProfileSaveGame& Profile);
+
+	/**
+	 * Brings an older save up to date without touching its existing data (resources, buildings, stats...):
+	 * version 1 saves get the default roster exactly once. Returns true if anything changed (the caller saves).
+	 */
+	bool MigrateProfile(UCRProfileSaveGame& Profile, const UCRHubCatalog* Catalog);
 }

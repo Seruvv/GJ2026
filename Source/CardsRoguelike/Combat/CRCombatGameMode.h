@@ -1,4 +1,4 @@
-// Prototype combat GameMode: scene setup, turn state machine, mana and card resolution.
+﻿// Prototype combat GameMode: scene setup, turn state machine, mana and card resolution.
 
 #pragma once
 
@@ -67,6 +67,8 @@ public:
 	ACRArena* GetArena() const { return Arena; }
 	ACRHamster* GetHamster() const { return Hamster; }
 	ECRTurnState GetTurnState() const { return TurnState; }
+	/** Name of the run's hamster (empty in a standalone combat test). */
+	const FString& GetHamsterDisplayName() const { return HamsterDisplayName; }
 	FString GetTurnStateName() const;
 	int32 GetMana() const { return Mana; }
 	int32 GetTurnNumber() const { return TurnNumber; }
@@ -118,6 +120,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "CR|Turn")
 	int32 ManaPerTurn = 3;
+
+	/** Run hamster name for the HUD (set when the combat is part of a run). */
+	FString HamsterDisplayName;
 
 	/** Card Blast damages the hamster when true (barrel explosions always can). */
 	UPROPERTY(EditAnywhere, Category = "CR|Cards")

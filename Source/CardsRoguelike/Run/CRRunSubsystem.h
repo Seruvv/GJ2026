@@ -26,8 +26,8 @@ public:
 	/** Development/repro API: a fresh run whose graph is generated from Seed (same seed = same map). */
 	void StartFreshRunWithSeed(int32 Seed);
 
-	/** Starts a new run for a profile (from the hub): random seed plus the hub's run-start bonuses. */
-	void StartProfileRun(const FString& ProfileId, const FCRRunStartBonuses& Bonuses);
+	/** Starts a new run for a profile (from the hub): random seed, the selected hamster and the hub bonuses. */
+	void StartProfileRun(const FCRRunStartConfig& Config);
 
 	/** Clears the run. A run still in progress is reported as Abandoned first. */
 	void AbandonRun();
@@ -118,7 +118,7 @@ public:
 private:
 	/** Picks the seed for a normal new run (outside the graph stream). */
 	static int32 MakeRandomRunSeed();
-	void StartRun(int32 Seed, const FCRRunStartBonuses& Bonuses, const FString& ProfileId);
+	void StartRun(int32 Seed, const FCRRunStartConfig& Config);
 	void RefreshNodeStates();
 	void ReportRunEnd(ECRRunEndReason Reason);
 

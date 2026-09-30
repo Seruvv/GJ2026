@@ -49,8 +49,15 @@ void ACRDebugHUD::DrawHUD()
 	RewardCardRects.Reset();
 	RewardSkipRect = FBox2D(ForceInit);
 
-	DrawArenaLabels(GM);
-	DrawEnemyOverlays(GM);
+	// World labels (edge names, pit, enemy intents) only while the fight is on; never over the Victory,
+	// Defeat or Reward overlays.
+	const ECRTurnState TurnState = GM->GetTurnState();
+	const bool bFightActive = TurnState == ECRTurnState::PlayerTurn || TurnState == ECRTurnState::ResolvingCard || TurnState == ECRTurnState::EnemyTurn;
+	if (bFightActive)
+	{
+		DrawArenaLabels(GM);
+		DrawEnemyOverlays(GM);
+	}
 
 	bool bValidDrop = false;
 	if (!bCursorOverHand && !bReward)
@@ -310,9 +317,15 @@ void ACRDebugHUD::DrawHamsterPanel(const ACRCombatGameMode* GM)
 	const float X = Canvas->ClipX - W - 28.f * S;
 	float Y = 24.f * S;
 
-	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + W, Y + 128.f * S)), PanelColor);
+	const FString Name = GM->GetHamsterDisplayName();
+	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + W, Y + (Name.IsEmpty() ? 128.f : 158.f) * S)), PanelColor);
 	DrawTextAt(TEXT("ХОМЯК"), FLinearColor(1.f, 0.75f, 0.35f), X, Y, 1.4f * S);
 	Y += 34.f * S;
+	if (!Name.IsEmpty())
+	{
+		DrawTextAt(Name, TextColor, X, Y, 1.3f * S);
+		Y += 30.f * S;
+	}
 
 	const float Ratio = Hamster->GetMaxHP() > 0 ? FMath::Clamp(float(Hamster->GetHP()) / Hamster->GetMaxHP(), 0.f, 1.f) : 0.f;
 	const FLinearColor BarColor = Ratio > 0.5f ? FLinearColor(0.3f, 0.85f, 0.35f) : (Ratio > 0.25f ? FLinearColor(0.95f, 0.75f, 0.2f) : FLinearColor(0.95f, 0.2f, 0.15f));

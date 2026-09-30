@@ -153,6 +153,16 @@ float ACRMenuHUDBase::DrawWrapped(const FString& Text, const FLinearColor& Color
 	return Y;
 }
 
+bool ACRMenuHUDBase::RegisterButton(const FBox2D& Rect, FName Action, const FString& Arg, bool bEnabled)
+{
+	FCRUIButton& Button = Buttons.AddDefaulted_GetRef();
+	Button.Rect = Rect;
+	Button.Action = Action;
+	Button.Arg = Arg;
+	Button.bEnabled = bEnabled;
+	return bEnabled && Rect.IsInside(Mouse);
+}
+
 bool ACRMenuHUDBase::DrawButton(const FBox2D& Rect, const FString& Label, FName Action, const FString& Arg, bool bEnabled,
 	ECRUIButtonStyle Style, const FString& SubLabel)
 {

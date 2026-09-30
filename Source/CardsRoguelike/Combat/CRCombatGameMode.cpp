@@ -86,6 +86,7 @@ void ACRCombatGameMode::ApplyRunState()
 
 	const FCRRunState& State = Run->GetRunState();
 	ManaPerTurn = State.Hamster.ManaPerTurn;
+	HamsterDisplayName = State.Hamster.Name;
 	if (Hamster)
 	{
 		Hamster->InitHealth(State.Hamster.CurrentHP, State.Hamster.MaxHP);

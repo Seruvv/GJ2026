@@ -4,6 +4,7 @@
 #include "CRHubGameMode.h"
 #include "CRHubRoomActor.h"
 #include "Engine/Canvas.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 
 namespace
@@ -24,6 +25,18 @@ namespace
 	const FName ActionStartRun = TEXT("StartRun");
 	const FName ActionMenu = TEXT("MainMenu");
 	const FName ActionPlaceholder = TEXT("Placeholder");
+	const FName ActionSelectHamster = TEXT("SelectHamster");
+
+	// Layout at 1080p (scaled by S): scene | details panel | roster, right to left.
+	constexpr float HubMargin = 28.f;
+	constexpr float HubRosterW = 300.f;
+	constexpr float HubDetailsW = 400.f;
+	constexpr float HubPanelGap = 16.f;
+	constexpr float HubPanelTop = 160.f;
+	constexpr float HubPanelBottomInset = 130.f;
+	constexpr float HubRosterRowH = 92.f;
+	constexpr float HubRosterRowGap = 8.f;
+	constexpr float HubRosterHeaderH = 56.f;
 
 	FString LevelText(int32 Level, int32 MaxLevel)
 	{
@@ -51,15 +64,31 @@ void ACRHubHUD::DrawScreen()
 		return;
 	}
 
+	const FHubLayout Layout = ComputeLayout();
 	DrawMarkers(*Profiles, *GM);
 	DrawTopBar(*Profiles);
 	if (const UCRHubBuildingDefinition* Selected = Profiles->GetCatalog()->FindBuilding(SelectedBuildingId))
 	{
-		DrawDetails(*Profiles, *Selected);
+		DrawDetails(*Profiles, *Selected, Layout.Details);
 	}
-	DrawBottomBar(*Profiles);
+	DrawRoster(*Profiles, Layout.Roster);
+	DrawBottomBar(*Profiles, Layout.SceneCenterX);
 	// Feedback just above the expedition button, clear of the building markers.
 	DrawMessage(Canvas->ClipY - 205.f * S);
+}
+
+ACRHubHUD::FHubLayout ACRHubHUD::ComputeLayout() const
+{
+	FHubLayout Layout;
+	const float Top = HubPanelTop * S;
+	const float Bottom = Canvas->ClipY - HubPanelBottomInset * S;
+	const float RosterLeft = Canvas->ClipX - (HubMargin + HubRosterW) * S;
+	const float DetailsLeft = RosterLeft - (HubPanelGap + HubDetailsW) * S;
+	Layout.Roster = FBox2D(FVector2D(RosterLeft, Top), FVector2D(RosterLeft + HubRosterW * S, Bottom));
+	Layout.Details = FBox2D(FVector2D(DetailsLeft, Top), FVector2D(DetailsLeft + HubDetailsW * S, Bottom));
+	// Centered in the scene area, but never over the profile box at the bottom left (narrow aspect ratios).
+	Layout.SceneCenterX = FMath::Max(DetailsLeft * 0.5f, (HubMargin + 330.f + 20.f + 190.f) * S);
+	return Layout;
 }
 
 void ACRHubHUD::DrawMarkers(const UCRProfileSubsystem& Profiles, ACRHubGameMode& GM)
@@ -106,7 +135,9 @@ void ACRHubHUD::DrawTopBar(const UCRProfileSubsystem& Profiles)
 	float X = 28.f * S;
 	float Y = 22.f * S;
 	const bool bHasRun = Profile->LastRun.bValid;
-	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + 620.f * S, Y + (bHasRun ? 150.f : 70.f) * S)), HubPanel);
+	// Kept narrow so the Heart marker behind it stays clear.
+	const float TopW = 440.f * S;
+	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + TopW, Y + (bHasRun ? 150.f : 70.f) * S)), HubPanel);
 	DrawTextAt(TEXT("УБЕЖИЩЕ В БУТЫЛКЕ"), HubTitle, X, Y, 2.0f * S);
 	Y += 48.f * S;
 	if (bHasRun)
@@ -114,9 +145,10 @@ void ACRHubHUD::DrawTopBar(const UCRProfileSubsystem& Profiles)
 		const FCRRunEndSummary& Run = Profile->LastRun;
 		const TCHAR* Outcome = Run.Reason == ECRRunEndReason::Completed ? TEXT("Последний поход: хомяк вернулся в убежище")
 			: (Run.Reason == ECRRunEndReason::Failed ? TEXT("Последний поход: хомяк погиб") : TEXT("Последний поход: прерван"));
-		DrawTextAt(Outcome, Run.Reason == ECRRunEndReason::Completed ? HubGood : HubBad, X, Y, 1.15f * S);
+		DrawTextAt(Outcome, Run.Reason == ECRRunEndReason::Completed ? HubGood : HubBad, X, Y, FitScale(Outcome, 1.15f * S, TopW - 12.f * S));
 		Y += 30.f * S;
-		DrawTextAt(FString::Printf(TEXT("Доставлено в убежище: %s"), *CRMeta::FormatGain(Run.Delivered)), HubText, X, Y, 1.05f * S);
+		const FString Delivered = FString::Printf(TEXT("Доставлено в убежище: %s"), *CRMeta::FormatGain(Run.Delivered));
+		DrawTextAt(Delivered, HubText, X, Y, FitScale(Delivered, 1.05f * S, TopW - 12.f * S));
 		Y += 28.f * S;
 		if (Run.Delivered.Silver != Run.Carried.Silver || Run.Delivered.Food != Run.Carried.Food || Run.Delivered.Wood != Run.Carried.Wood)
 		{
@@ -162,14 +194,14 @@ float ACRHubHUD::DrawCost(const FCRMetaResources& Cost, const FCRMetaResources& 
 	return X;
 }
 
-void ACRHubHUD::DrawDetails(const UCRProfileSubsystem& Profiles, const UCRHubBuildingDefinition& Building)
+void ACRHubHUD::DrawDetails(const UCRProfileSubsystem& Profiles, const UCRHubBuildingDefinition& Building, const FBox2D& Panel)
 {
 	const UCRProfileSaveGame* Profile = Profiles.GetActiveProfile();
-	const float PanelW = 560.f * S;
-	const float Left = Canvas->ClipX - PanelW - 28.f * S;
-	const float Top = 160.f * S;
-	const float Bottom = Canvas->ClipY - 130.f * S;
-	const float Pad = 22.f * S;
+	const float PanelW = Panel.GetSize().X;
+	const float Left = Panel.Min.X;
+	const float Top = Panel.Min.Y;
+	const float Bottom = Panel.Max.Y;
+	const float Pad = 18.f * S;
 	const float X = Left + Pad;
 	const float MaxW = PanelW - Pad * 2.f;
 	DrawBox(FBox2D(FVector2D(Left, Top), FVector2D(Left + PanelW, Bottom)), HubPanel);
@@ -262,30 +294,41 @@ void ACRHubHUD::DrawDetails(const UCRProfileSubsystem& Profiles, const UCRHubBui
 	}
 }
 
-void ACRHubHUD::DrawBottomBar(const UCRProfileSubsystem& Profiles)
+void ACRHubHUD::DrawBottomBar(const UCRProfileSubsystem& Profiles, float SceneCenterX)
 {
 	const UCRProfileSaveGame* Profile = Profiles.GetActiveProfile();
 	const float H = Canvas->ClipY;
 
-	// Bottom center (of the scene area): the expedition button and what the run will get from the hub.
-	const float SceneCenterX = (Canvas->ClipX - 600.f * S) * 0.5f;
+	// Bottom center (of the scene area): the expedition button and who goes, with the effective run stats
+	// (hamster base stats + hub bonuses).
+	FCRRunStartConfig Next;
+	const bool bCanStart = Profiles.GetNextRunStartConfig(Next);
+	FCRRunState Preview;
+	if (bCanStart)
+	{
+		CRRun::ApplyStartConfig(Preview, Next);
+	}
 	const float BtnW = 380.f * S;
-	DrawButton(FBox2D(FVector2D(SceneCenterX - BtnW * 0.5f, H - 150.f * S), FVector2D(SceneCenterX + BtnW * 0.5f, H - 62.f * S)),
-		TEXT("В ПОХОД"), ActionStartRun, FString(), true, ECRUIButtonStyle::Primary, TEXT("начать новый забег"));
-
-	const FCRRunStartBonuses Bonuses = Profiles.GetRunStartBonuses();
-	TArray<FString> Parts;
-	Parts.Add(FString::Printf(TEXT("здоровье %d"), CRRun::BaseHamsterMaxHP + Bonuses.BonusMaxHP));
-	Parts.Add(FString::Printf(TEXT("колода: %d карт"), CRRun::StarterDeck().Num() + Bonuses.ExtraCardIds.Num()));
-	if (Bonuses.StartSilver > 0)
+	DrawButton(FBox2D(FVector2D(SceneCenterX - BtnW * 0.5f, H - 150.f * S), FVector2D(SceneCenterX + BtnW * 0.5f, H - 66.f * S)),
+		TEXT("В ПОХОД"), ActionStartRun, FString(), bCanStart, ECRUIButtonStyle::Primary, bCanStart ? TEXT("начать новый забег") : TEXT("выберите хомяка"));
+	if (bCanStart)
 	{
-		Parts.Add(FString::Printf(TEXT("серебро %d"), Bonuses.StartSilver));
+		TArray<FString> Parts;
+		Parts.Add(Preview.Hamster.Name);
+		Parts.Add(FString::Printf(TEXT("Здоровье %d"), Preview.Hamster.MaxHP));
+		Parts.Add(FString::Printf(TEXT("Мана %d"), Preview.Hamster.ManaPerTurn));
+		Parts.Add(FString::Printf(TEXT("Колода %d"), Preview.DeckCardIds.Num()));
+		if (Preview.Carried.Silver > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("Серебро %d"), Preview.Carried.Silver));
+		}
+		if (Preview.Carried.Food > 0)
+		{
+			Parts.Add(FString::Printf(TEXT("Еда %d"), Preview.Carried.Food));
+		}
+		const FString Line = FString::Join(Parts, TEXT(" • "));
+		DrawTextShadowCentered(Line, HubText, SceneCenterX, H - 54.f * S, FitScale(Line, 1.2f * S, SceneCenterX * 2.f - 700.f * S));
 	}
-	if (Bonuses.StartFood > 0)
-	{
-		Parts.Add(FString::Printf(TEXT("еда %d"), Bonuses.StartFood));
-	}
-	DrawTextShadowCentered(TEXT("В поход: ") + FString::Join(Parts, TEXT(" · ")), HubText, SceneCenterX, H - 46.f * S, 1.0f * S);
 
 	// Bottom left: active profile.
 	const float X = 28.f * S;
@@ -308,6 +351,110 @@ void ACRHubHUD::DrawBottomBar(const UCRProfileSubsystem& Profiles)
 	}
 }
 
+void ACRHubHUD::DrawRoster(const UCRProfileSubsystem& Profiles, const FBox2D& Panel)
+{
+	const UCRProfileSaveGame* Profile = Profiles.GetActiveProfile();
+	RosterRect = Panel;
+	DrawBox(Panel, HubPanel);
+	DrawFrame(Panel, FLinearColor(0.5f, 0.42f, 0.25f), 2.f * S);
+	const float Pad = 12.f * S;
+	DrawTextAt(TEXT("ЖИВЫЕ ХОМЯКИ"), HubTitle, Panel.Min.X + Pad, Panel.Min.Y + 14.f * S, FitScale(TEXT("ЖИВЫЕ ХОМЯКИ"), 1.45f * S, Panel.GetSize().X - Pad * 2.f));
+
+	// Living hamsters only (the epitaph is secret while alive and never shown here).
+	TArray<const FCRHamsterPersistentState*> Living;
+	for (const FCRHamsterPersistentState& Hamster : Profile->Hamsters)
+	{
+		if (Hamster.bAlive)
+		{
+			Living.Add(&Hamster);
+		}
+	}
+	const float ListTop = Panel.Min.Y + HubRosterHeaderH * S;
+	const float RowStep = (HubRosterRowH + HubRosterRowGap) * S;
+	const int32 Visible = FMath::Max(1, FMath::FloorToInt((Panel.Max.Y - ListTop - Pad) / RowStep));
+	RosterMaxScroll = FMath::Max(0, Living.Num() - Visible);
+	RosterScroll = FMath::Clamp(RosterScroll, 0, RosterMaxScroll);
+	if (Living.Num() == 0)
+	{
+		DrawWrapped(TEXT("В убежище не осталось живых хомяков"), HubDim, Panel.Min.X + Pad, ListTop, Panel.GetSize().X - Pad * 2.f, 1.0f * S);
+		return;
+	}
+
+	for (int32 Row = 0; Row < Visible && RosterScroll + Row < Living.Num(); ++Row)
+	{
+		const FCRHamsterPersistentState& Hamster = *Living[RosterScroll + Row];
+		const FBox2D Rect(FVector2D(Panel.Min.X + Pad, ListTop + Row * RowStep), FVector2D(Panel.Max.X - Pad, ListTop + Row * RowStep + HubRosterRowH * S));
+		const bool bSelected = Hamster.HamsterId == Profile->SelectedHamsterId;
+		const bool bHovered = RegisterButton(Rect, ActionSelectHamster, Hamster.HamsterId.ToString());
+
+		// Selected: warm fill, gold frame and a marker bar; hover: lighter fill and a white frame.
+		DrawBox(Rect, bSelected ? FLinearColor(0.34f, 0.24f, 0.09f, 0.95f) : (bHovered ? FLinearColor(0.2f, 0.2f, 0.25f, 0.95f) : FLinearColor(0.1f, 0.1f, 0.13f, 0.9f)));
+		DrawFrame(Rect, bSelected ? FLinearColor(1.f, 0.8f, 0.35f) : (bHovered ? FLinearColor::White : FLinearColor(0.3f, 0.3f, 0.36f)), (bSelected ? 3.f : 2.f) * S);
+		if (bSelected)
+		{
+			DrawBox(FBox2D(Rect.Min, FVector2D(Rect.Min.X + 6.f * S, Rect.Max.Y)), FLinearColor(1.f, 0.8f, 0.35f));
+		}
+
+		const float PortraitSize = HubRosterRowH * S - 16.f * S;
+		const FBox2D Portrait(FVector2D(Rect.Min.X + 12.f * S, Rect.Min.Y + 8.f * S), FVector2D(Rect.Min.X + 12.f * S + PortraitSize, Rect.Min.Y + 8.f * S + PortraitSize));
+		DrawPortrait(Hamster, Portrait);
+
+		const float TextX = Portrait.Max.X + 12.f * S;
+		const float TextW = Rect.Max.X - TextX - 8.f * S;
+		DrawTextAt(Hamster.DisplayName, bSelected ? HubTitle : HubText, TextX, Rect.Min.Y + 8.f * S, FitScale(Hamster.DisplayName, 1.3f * S, TextW));
+		DrawTextAt(FString::Printf(TEXT("Здоровье %d"), Hamster.BaseMaxHP), HubText, TextX, Rect.Min.Y + 40.f * S, 1.0f * S);
+		DrawTextAt(FString::Printf(TEXT("Мана %d"), Hamster.BaseManaPerTurn), FLinearColor(0.55f, 0.75f, 1.f), TextX, Rect.Min.Y + 64.f * S, 1.0f * S);
+		if (bSelected)
+		{
+			DrawTextAt(TEXT("в поход"), HubTitle, Rect.Max.X - TextWidth(TEXT("в поход"), 0.85f * S) - 10.f * S, Rect.Min.Y + 66.f * S, 0.85f * S);
+		}
+	}
+	if (RosterMaxScroll > 0)
+	{
+		DrawTextCentered(FString::Printf(TEXT("%d–%d из %d · колесо мыши"), RosterScroll + 1, FMath::Min(Living.Num(), RosterScroll + Visible), Living.Num()),
+			HubDim, Panel.GetCenter().X, Panel.Max.Y - 26.f * S, 0.85f * S);
+	}
+}
+
+void ACRHubHUD::DrawPortrait(const FCRHamsterPersistentState& Hamster, const FBox2D& Rect)
+{
+	const FVector2D Size = Rect.GetSize();
+	if (UTexture2D* Texture = GetAvatarTexture(Hamster))
+	{
+		DrawTexture(Texture, Rect.Min.X, Rect.Min.Y, Size.X, Size.Y, 0.f, 0.f, 1.f, 1.f);
+		DrawFrame(Rect, Hamster.AvatarTint, 2.f * S);
+		return;
+	}
+	// Placeholder: tinted frame, darker inner face and the initial.
+	DrawBox(Rect, Hamster.AvatarTint);
+	const FBox2D Inner(Rect.Min + FVector2D(4.f * S), Rect.Max - FVector2D(4.f * S));
+	DrawBox(Inner, FLinearColor::LerpUsingHSV(Hamster.AvatarTint, FLinearColor::Black, 0.55f));
+	const FString Initial = Hamster.DisplayName.Left(1).ToUpper();
+	const float Scale = 2.4f * S;
+	DrawTextCentered(Initial, Hamster.AvatarTint * 1.4f, Rect.GetCenter().X, Rect.GetCenter().Y - TextHeight(Scale) * 0.5f, Scale);
+}
+
+UTexture2D* ACRHubHUD::GetAvatarTexture(const FCRHamsterPersistentState& Hamster)
+{
+	if (const TObjectPtr<UTexture2D>* Cached = AvatarCache.Find(Hamster.HamsterId))
+	{
+		return *Cached;
+	}
+	UTexture2D* Texture = Hamster.AvatarTexture.IsNull() ? nullptr : Hamster.AvatarTexture.LoadSynchronous();
+	AvatarCache.Add(Hamster.HamsterId, Texture);
+	return Texture;
+}
+
+bool ACRHubHUD::HandleScroll(const FVector2D& ScreenPos, float Delta)
+{
+	if (!RosterRect.bIsValid || !RosterRect.IsInside(ScreenPos))
+	{
+		return false;
+	}
+	RosterScroll = FMath::Clamp(RosterScroll - (Delta > 0.f ? 1 : -1), 0, RosterMaxScroll);
+	return true;
+}
+
 void ACRHubHUD::OnButton(const FCRUIButton& Button)
 {
 	ACRHubGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ACRHubGameMode>() : nullptr;
@@ -320,6 +467,10 @@ void ACRHubHUD::OnButton(const FCRUIButton& Button)
 	if (Button.Action == ActionSelect)
 	{
 		SelectedBuildingId = FName(*Button.Arg);
+	}
+	else if (Button.Action == ActionSelectHamster)
+	{
+		Profiles->SelectHamster(FName(*Button.Arg));
 	}
 	else if (Button.Action == ActionUpgrade)
 	{

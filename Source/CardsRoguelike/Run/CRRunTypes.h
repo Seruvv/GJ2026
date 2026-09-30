@@ -69,6 +69,39 @@ struct FCRRunStartBonuses
 	int32 StartFood = 0;
 };
 
+/**
+ * Everything a new run is started from: who goes (a snapshot of the hamster's base stats and deck) and the
+ * hub bonuses on top. The run copies it into its own state, so it never depends on the hub staying loaded.
+ */
+USTRUCT(BlueprintType)
+struct FCRRunStartConfig
+{
+	GENERATED_BODY()
+
+	/** Profile the run belongs to (empty = developer run). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString ProfileId;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FName HamsterId;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString HamsterName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 BaseMaxHP = 30;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 BaseManaPerTurn = 3;
+
+	/** The hamster's own starting deck; empty = the shared starter deck. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> StartingDeckCardIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FCRRunStartBonuses Bonuses;
+};
+
 /** One room on the run map. Connections are directed: they list the legal next rooms. */
 USTRUCT(BlueprintType)
 struct FCRRunNodeData
@@ -104,6 +137,10 @@ USTRUCT(BlueprintType)
 struct FCRHamsterRunData
 {
 	GENERATED_BODY()
+
+	/** Persistent hamster this run was started with (None for developer runs). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	FName HamsterId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
 	FString Name;
@@ -276,6 +313,16 @@ namespace CRRun
 
 	/** Hamster and deck every run starts from (before hub bonuses). */
 	constexpr int32 BaseHamsterMaxHP = 30;
+	constexpr int32 BaseHamsterManaPerTurn = 3;
+
+	/** Start config of a developer run (no profile): the prototype test hamster. */
+	FCRRunStartConfig MakeDeveloperStartConfig();
+
+	/**
+	 * Fills a fresh run's hamster, deck and carried loot from a start config: effective max HP = base + hub bonus,
+	 * mana = base mana, deck = the hamster's deck (or the starter deck) + bonus cards. The hamster starts at full HP.
+	 */
+	void ApplyStartConfig(struct FCRRunState& RunState, const FCRRunStartConfig& Config);
 	inline TArray<FName> StarterDeck() { return { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") }; }
 
 	/** Prototype maps used by the run loop. */
