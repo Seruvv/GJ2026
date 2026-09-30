@@ -342,6 +342,17 @@ void ACRCombatGameMode::Tick(float DeltaSeconds)
 	switch (TurnState)
 	{
 	case ECRTurnState::PlayerTurn:
+		// An enemy can be eliminated while no card is resolving (a late fall into the void or pit, a barrel
+		// chain after the resolve watchdog). The elimination only flags the check; it runs here, outside the
+		// physics/overlap callback, so Victory (or Defeat) starts at once and exactly once.
+		if (TurnNumber > 0 && (bEndCheckPending || (Hamster && Hamster->IsDead())))
+		{
+			bEndCheckPending = false;
+			if (CheckCombatEnd())
+			{
+				break;
+			}
+		}
 		RefreshIntents();
 		break;
 
@@ -476,7 +487,8 @@ void ACRCombatGameMode::RequestEndTurn()
 
 void ACRCombatGameMode::CycleBoundaryType(int32 EdgeIndex)
 {
-	if (Arena && EdgeIndex < Arena->GetNumEdges() && TurnState == ECRTurnState::PlayerTurn)
+	// Developer tool: only in Debug View (the controller also requires Shift+7/8/9).
+	if (bDebugView && Arena && EdgeIndex >= 0 && EdgeIndex < Arena->GetNumEdges() && TurnState == ECRTurnState::PlayerTurn)
 	{
 		Arena->CycleEdgeType(EdgeIndex);
 		LogEvent(FString::Printf(TEXT("Edge %d is now %s"), EdgeIndex + 1, *CRProto::BoundaryTypeName(Arena->GetEdgeType(EdgeIndex))));
@@ -862,6 +874,8 @@ void ACRCombatGameMode::RefreshIntents()
 void ACRCombatGameMode::OnEnemyEliminated(ACREnemy* Enemy, ECREliminationReason Reason)
 {
 	Enemies.Remove(Enemy);
+	// Card resolution and enemy actions check the end themselves; this covers eliminations between them.
+	bEndCheckPending = true;
 	if (PendingTarget.Get() == Enemy)
 	{
 		PendingTarget.Reset();

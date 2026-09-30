@@ -408,7 +408,11 @@ void ACRDebugHUD::DrawCard(const FCRCardDef& Card, int32 Index, const FBox2D& Re
 	const float TextMaxW = Size.X - 14.f * S * TextScale;
 	DrawTextFitted(Card.Name, Fade(bAffordable ? TextColor : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.32f, 1.6f * S * TextScale, TextMaxW);
 	DrawTextFitted(Card.ShortText, Fade(bAffordable ? FLinearColor(0.75f, 0.8f, 0.9f) : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.52f, 1.05f * S * TextScale, TextMaxW, 0.9f);
-	DrawTextCentered(FString::Printf(TEXT("[%d]"), Index + 1), Fade(DimTextColor), CenterX, Rect.Max.Y - 30.f * S * TextScale, 1.0f * S * TextScale);
+	// Keyboard shortcut label only for slots that have one (1-9); later cards are mouse-only.
+	if (Index < 9)
+	{
+		DrawTextCentered(FString::Printf(TEXT("[%d]"), Index + 1), Fade(DimTextColor), CenterX, Rect.Max.Y - 30.f * S * TextScale, 1.0f * S * TextScale);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -558,8 +562,8 @@ void ACRDebugHUD::DrawDebugExtras(const ACRCombatGameMode* GM)
 	DrawTextAt(TEXT("DEBUG VIEW  (F10)"), FLinearColor(1.f, 0.4f, 1.f), X, Y, 1.2f * S);
 	Y += 28.f * S;
 	DrawTextAt(GM->IsRunIntegrated()
-		? TEXT("1-5 select card | LMB target | RMB cancel | Space end turn | 7/8/9 cycle edge | R restart disabled during run")
-		: TEXT("1-5 select card | LMB target | RMB cancel | Space end turn | 7/8/9 cycle edge | R restart"), DimTextColor, X, Y, 0.95f * S);
+		? TEXT("1-9 select card | LMB target | RMB cancel | Space end turn | Shift+7/8/9 cycle edge (debug) | R restart disabled during run")
+		: TEXT("1-9 select card | LMB target | RMB cancel | Space end turn | Shift+7/8/9 cycle edge (debug) | R restart"), DimTextColor, X, Y, 0.95f * S);
 	Y += 30.f * S;
 
 	if (GM->GetTurnState() == ECRTurnState::Reward)

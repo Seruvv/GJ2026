@@ -237,6 +237,8 @@ private:
 	TArray<FName> RewardOffers;
 	FName ChosenReward;
 	bool bResourcesGranted = false;
+	/** Set by an elimination; the next PlayerTurn tick runs CheckCombatEnd (see Tick). */
+	bool bEndCheckPending = false;
 	bool bRewardCommitted = false;
 	FString FlashMessage;
 	double FlashMessageTime = -100.0;

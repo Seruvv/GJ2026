@@ -28,19 +28,19 @@ void ACRPlayerController::SetupInputComponent()
 
 	// Prototype bindings. Real card input will move to Enhanced Input assets.
 	// F1-F9 are avoided: the engine's debug exec bindings claim several of them in PIE.
-	InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ACRPlayerController::SelectCard1);
-	InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACRPlayerController::SelectCard2);
-	InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACRPlayerController::SelectCard3);
-	InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ACRPlayerController::SelectCard4);
-	InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ACRPlayerController::SelectCard5);
+	// Number keys 1-9 (card slots; Shift+7/8/9 = debug edge cycling, see OnNumberKey).
+	const FKey NumberKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+	for (int32 Digit = 1; Digit <= 9; ++Digit)
+	{
+		FInputKeyBinding Binding(FInputChord(NumberKeys[Digit - 1]), IE_Pressed);
+		Binding.KeyDelegate.GetDelegateForManualSet().BindLambda([this, Digit]() { OnNumberKey(Digit); });
+		InputComponent->KeyBindings.Add(Binding);
+	}
 	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ACRPlayerController::OnLeftPressed);
 	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &ACRPlayerController::OnLeftReleased);
 	InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACRPlayerController::OnCancel);
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACRPlayerController::OnCancel);
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACRPlayerController::OnEndTurn);
-	InputComponent->BindKey(EKeys::Seven, IE_Pressed, this, &ACRPlayerController::CycleEdge1);
-	InputComponent->BindKey(EKeys::Eight, IE_Pressed, this, &ACRPlayerController::CycleEdge2);
-	InputComponent->BindKey(EKeys::Nine, IE_Pressed, this, &ACRPlayerController::CycleEdge3);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACRPlayerController::OnRestart);
 	InputComponent->BindKey(EKeys::F10, IE_Pressed, this, &ACRPlayerController::OnToggleDebugView);
 }
@@ -84,19 +84,24 @@ void ACRPlayerController::SelectCard(int32 Index)
 	}
 }
 
-void ACRPlayerController::CycleEdge1()
+bool ACRPlayerController::IsShiftDown() const
 {
-	if (ACRCombatGameMode* GM = GetCombatMode()) { GM->CycleBoundaryType(0); }
+	return IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
 }
 
-void ACRPlayerController::CycleEdge2()
+void ACRPlayerController::OnNumberKey(int32 Digit)
 {
-	if (ACRCombatGameMode* GM = GetCombatMode()) { GM->CycleBoundaryType(1); }
-}
-
-void ACRPlayerController::CycleEdge3()
-{
-	if (ACRCombatGameMode* GM = GetCombatMode()) { GM->CycleBoundaryType(2); }
+	ACRCombatGameMode* GM = GetCombatMode();
+	if (!GM)
+	{
+		return;
+	}
+	if (Digit >= 7 && GM->IsDebugView() && IsShiftDown())
+	{
+		GM->CycleBoundaryType(Digit - 7);
+		return;
+	}
+	SelectCard(Digit - 1);
 }
 
 void ACRPlayerController::OnLeftPressed()
