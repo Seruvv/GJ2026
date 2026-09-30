@@ -207,6 +207,40 @@ public:
 	TArray<FCRHamsterDefinition> Hamsters;
 };
 
+/** How and where a hamster died. Written once, when the failed run is applied to the profile. */
+USTRUCT(BlueprintType)
+struct FCRHamsterDeathRecord
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	bool bValid = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FDateTime DeathTimestamp;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	ECRHamsterDeathCause DeathCause = ECRHamsterDeathCause::None;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	int32 RunSeed = 0;
+
+	/** Run node the hamster died in. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FName NodeId;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	ECRRoomType RoomType = ECRRoomType::Combat;
+
+	/** Resources the hamster was carrying (all lost). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FCRMetaResources LostLoot;
+
+	/** Rooms entered in the fatal run (Start excluded). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	int32 RoomsVisited = 0;
+};
+
 /** One hamster owned by a profile. Base stats are never changed by hub upgrades (those are derived at run start). */
 USTRUCT(BlueprintType)
 struct FCRHamsterPersistentState
@@ -234,12 +268,17 @@ struct FCRHamsterPersistentState
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
 	int32 BaseManaPerTurn = 3;
 
-	/** Secret while alive; the graveyard (later) reveals it. */
+	/** Assigned at creation, secret while alive; only the graveyard shows it (see CRMeta::GetRevealedEpitaph). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
 	FString EpitaphText;
 
+	/** Dead hamsters stay in the profile forever (graveyard); they are never selected or revived. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
 	bool bAlive = true;
+
+	/** Set when the hamster died (version 3). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
+	FCRHamsterDeathRecord Death;
 
 	// Future-safe fields (not used by gameplay yet).
 
@@ -253,13 +292,64 @@ struct FCRHamsterPersistentState
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
 	TArray<FName> InjuryIds;
 
-	/** Per-hamster counters (runs, kills...). */
+	/** Per-hamster counters: "RunsStarted", "RunsCompleted" (CRMeta::HamsterStat*), more later. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
 	TMap<FName, int32> Stats;
 
 	/** Job / retirement state id (None = on the roster). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hamster")
 	FName AssignmentId;
+};
+
+/** HP/mana pair a recruit is created with (keeps recruits in the same design space as the default roster). */
+USTRUCT(BlueprintType)
+struct FCRRecruitStatTemplate
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment", meta = (ClampMin = "1"))
+	int32 BaseMaxHP = 30;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment", meta = (ClampMin = "1"))
+	int32 BaseManaPerTurn = 3;
+};
+
+/**
+ * Prototype recruitment rules and content (replaceable after the jam theme is known). Recruiting is free for
+ * now; costs and building requirements can be added here later without touching the candidate flow.
+ */
+UCLASS(BlueprintType)
+class CARDSROGUELIKE_API UCRRecruitmentDefinition : public UPrimaryDataAsset
+{
+	GENERATED_BODY()
+
+public:
+	/** Candidates offered at the same time. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment", meta = (ClampMin = "1"))
+	int32 CandidateCount = 3;
+
+	/** Recruiting is possible while the profile has fewer living hamsters than this. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment", meta = (ClampMin = "1"))
+	int32 TargetLivingRosterSize = 6;
+
+	/** Names for new candidates; names already used in the profile are skipped. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment")
+	TArray<FString> NamePool;
+
+	/** Name used once the pool is exhausted; "{N}" is replaced by a running number. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment")
+	FString FallbackNamePattern = TEXT("Хомяк {N}");
+
+	/** Epitaphs assigned at creation (secret until death); "{Name}" is replaced by the hamster's name. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment", meta = (MultiLine = "true"))
+	TArray<FString> EpitaphPool;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment")
+	TArray<FCRRecruitStatTemplate> StatTemplates;
+
+	/** Placeholder portrait tints. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recruitment")
+	TArray<FLinearColor> TintOptions;
 };
 
 /** Everything the hub needs: its buildings and the profile/run economy rules. */
@@ -281,9 +371,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Economy", meta = (ClampMin = "0", ClampMax = "100"))
 	int32 CompletedRunKeepPercent = 100;
 
-	/** Share (%) kept when the hamster dies. */
+	/** Share (%) kept when the hamster dies (the dead carry nothing home). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Economy", meta = (ClampMin = "0", ClampMax = "100"))
-	int32 FailedRunKeepPercent = 50;
+	int32 FailedRunKeepPercent = 0;
 
 	/** Share (%) kept when the player leaves a run early. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Economy", meta = (ClampMin = "0", ClampMax = "100"))
@@ -292,6 +382,10 @@ public:
 	/** Hamsters a new (or migrated) profile starts with. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamsters")
 	TObjectPtr<UCRHamsterRosterDefinition> DefaultRoster;
+
+	/** Replacement hamsters (candidates, roster target). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hamsters")
+	TObjectPtr<UCRRecruitmentDefinition> Recruitment;
 
 	const UCRHubBuildingDefinition* FindBuilding(FName BuildingId) const;
 };

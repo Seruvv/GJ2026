@@ -26,6 +26,14 @@ namespace
 	const FName ActionMenu = TEXT("MainMenu");
 	const FName ActionPlaceholder = TEXT("Placeholder");
 	const FName ActionSelectHamster = TEXT("SelectHamster");
+	const FName ActionOpenGraveyard = TEXT("OpenGraveyard");
+	const FName ActionOpenRecruitment = TEXT("OpenRecruitment");
+	const FName ActionBack = TEXT("Back");
+	const FName ActionSelectGrave = TEXT("SelectGrave");
+	const FName ActionRecruit = TEXT("Recruit");
+
+	const FLinearColor HubEpitaph(0.96f, 0.88f, 0.7f);
+	const FLinearColor HubMana(0.55f, 0.75f, 1.f);
 
 	// Layout at 1080p (scaled by S): scene | details panel | roster, right to left.
 	constexpr float HubMargin = 28.f;
@@ -37,6 +45,8 @@ namespace
 	constexpr float HubRosterRowH = 92.f;
 	constexpr float HubRosterRowGap = 8.f;
 	constexpr float HubRosterHeaderH = 56.f;
+	/** Recruitment button at the bottom of the roster panel. */
+	constexpr float HubRosterFooterH = 74.f;
 
 	FString LevelText(int32 Level, int32 MaxLevel)
 	{
@@ -61,6 +71,20 @@ void ACRHubHUD::DrawScreen()
 		DrawTextCentered(Profiles->HasActiveProfile() ? TEXT("Не найдены данные убежища (DA_HubCatalog)") : TEXT("Профиль не выбран"),
 			HubBad, CenterX, 470.f * S, 1.3f * S);
 		DrawButton(FBox2D(FVector2D(CenterX - 160.f * S, 530.f * S), FVector2D(CenterX + 160.f * S, 590.f * S)), TEXT("В ГЛАВНОЕ МЕНЮ"), ActionMenu);
+		return;
+	}
+
+	// Overlays replace the sanctuary UI entirely, so nothing underneath stays clickable.
+	if (View == EHubView::Graveyard)
+	{
+		DrawGraveyard(*Profiles);
+		DrawMessage(Canvas->ClipY - 120.f * S);
+		return;
+	}
+	if (View == EHubView::Recruitment)
+	{
+		DrawRecruitment(*Profiles);
+		DrawMessage(Canvas->ClipY - 120.f * S);
 		return;
 	}
 
@@ -143,16 +167,30 @@ void ACRHubHUD::DrawTopBar(const UCRProfileSubsystem& Profiles)
 	if (bHasRun)
 	{
 		const FCRRunEndSummary& Run = Profile->LastRun;
-		const TCHAR* Outcome = Run.Reason == ECRRunEndReason::Completed ? TEXT("Последний поход: хомяк вернулся в убежище")
-			: (Run.Reason == ECRRunEndReason::Failed ? TEXT("Последний поход: хомяк погиб") : TEXT("Последний поход: прерван"));
+		// Names come from version-3 summaries; older ones fall back to the generic wording.
+		FString Outcome;
+		switch (Run.Reason)
+		{
+		case ECRRunEndReason::Completed:
+			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: хомяк вернулся в убежище")) : FString::Printf(TEXT("Хомяк вернулся из похода: %s"), *Run.HamsterName);
+			break;
+		case ECRRunEndReason::Failed:
+			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: хомяк погиб")) : FString::Printf(TEXT("Хомяк погиб в походе: %s"), *Run.HamsterName);
+			break;
+		default:
+			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: прерван")) : FString::Printf(TEXT("Поход прерван, хомяк жив: %s"), *Run.HamsterName);
+			break;
+		}
 		DrawTextAt(Outcome, Run.Reason == ECRRunEndReason::Completed ? HubGood : HubBad, X, Y, FitScale(Outcome, 1.15f * S, TopW - 12.f * S));
 		Y += 30.f * S;
-		const FString Delivered = FString::Printf(TEXT("Доставлено в убежище: %s"), *CRMeta::FormatGain(Run.Delivered));
+		const FString Delivered = FString::Printf(TEXT("Доставлено в убежище: %s"), Run.Delivered.IsZero() ? TEXT("ничего") : *CRMeta::FormatGain(Run.Delivered));
 		DrawTextAt(Delivered, HubText, X, Y, FitScale(Delivered, 1.05f * S, TopW - 12.f * S));
 		Y += 28.f * S;
 		if (Run.Delivered.Silver != Run.Carried.Silver || Run.Delivered.Food != Run.Carried.Food || Run.Delivered.Wood != Run.Carried.Wood)
 		{
-			DrawTextAt(FString::Printf(TEXT("Добыто в походе: %s"), *CRMeta::FormatResources(Run.Carried)), HubDim, X, Y, 1.0f * S);
+			const FString Lost = FString::Printf(TEXT("%s: %s"), Run.Reason == ECRRunEndReason::Completed ? TEXT("Добыто в походе") : TEXT("Потеряно в походе"),
+				*CRMeta::FormatResources(Run.Carried));
+			DrawTextAt(Lost, HubDim, X, Y, FitScale(Lost, 1.0f * S, TopW - 12.f * S));
 		}
 		else
 		{
@@ -309,8 +347,15 @@ void ACRHubHUD::DrawBottomBar(const UCRProfileSubsystem& Profiles, float SceneCe
 		CRRun::ApplyStartConfig(Preview, Next);
 	}
 	const float BtnW = 380.f * S;
+	const bool bNobodyAlive = Profiles.GetLivingHamsterCount() == 0;
 	DrawButton(FBox2D(FVector2D(SceneCenterX - BtnW * 0.5f, H - 150.f * S), FVector2D(SceneCenterX + BtnW * 0.5f, H - 66.f * S)),
-		TEXT("В ПОХОД"), ActionStartRun, FString(), bCanStart, ECRUIButtonStyle::Primary, bCanStart ? TEXT("начать новый забег") : TEXT("выберите хомяка"));
+		TEXT("В ПОХОД"), ActionStartRun, FString(), bCanStart, ECRUIButtonStyle::Primary,
+		bCanStart ? TEXT("начать новый забег") : (bNobodyAlive ? TEXT("некому идти в поход") : TEXT("выберите хомяка")));
+	if (!bCanStart && bNobodyAlive)
+	{
+		const FString Line = TEXT("Некому идти в поход. Примите нового хомяка: «Пополнение».");
+		DrawTextShadowCentered(Line, HubBad, SceneCenterX, H - 54.f * S, FitScale(Line, 1.15f * S, SceneCenterX * 2.f - 700.f * S));
+	}
 	if (bCanStart)
 	{
 		TArray<FString> Parts;
@@ -337,11 +382,20 @@ void ACRHubHUD::DrawBottomBar(const UCRProfileSubsystem& Profiles, float SceneCe
 	DrawTextAt(Profile->DisplayName, HubText, X, H - 116.f * S, FitScale(Profile->DisplayName, 1.35f * S, 310.f * S));
 	DrawButton(FBox2D(FVector2D(X, H - 78.f * S), FVector2D(X + 310.f * S, H - 34.f * S)), TEXT("СМЕНИТЬ ПРОФИЛЬ"), ActionMenu);
 
-	// Bottom right: secondary screens (placeholders for now) and exit to the main menu.
-	const TCHAR* Labels[] = { TEXT("Дневник"), TEXT("Достижения"), TEXT("Настройки"), TEXT("Выход") };
+	// Bottom right: the graveyard, secondary screens (placeholders for now) and exit to the main menu.
 	const float SmallW = 128.f * S;
 	const float Gap = 10.f * S;
-	float BX = Canvas->ClipX - 28.f * S - 4.f * SmallW - 3.f * Gap;
+	float BX = Canvas->ClipX - 28.f * S - 5.f * SmallW - 4.f * Gap;
+	{
+		// New deaths since the last visit are marked so the consequence is discoverable.
+		const int32 Dead = Profile->Hamsters.Num() - Profiles.GetLivingHamsterCount();
+		const int32 Unseen = Profiles.GetUnseenGraveCount();
+		const FString Label = Dead > 0 ? FString::Printf(TEXT("Кладбище · %d"), Dead) : FString(TEXT("Кладбище"));
+		DrawButton(FBox2D(FVector2D(BX, H - 100.f * S), FVector2D(BX + SmallW, H - 50.f * S)), Label, ActionOpenGraveyard, FString(), true,
+			Unseen > 0 ? ECRUIButtonStyle::Danger : ECRUIButtonStyle::Normal, Unseen > 0 ? TEXT("новая запись") : FString());
+		BX += SmallW + Gap;
+	}
+	const TCHAR* Labels[] = { TEXT("Дневник"), TEXT("Достижения"), TEXT("Настройки"), TEXT("Выход") };
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const bool bExit = i == 3;
@@ -358,25 +412,32 @@ void ACRHubHUD::DrawRoster(const UCRProfileSubsystem& Profiles, const FBox2D& Pa
 	DrawBox(Panel, HubPanel);
 	DrawFrame(Panel, FLinearColor(0.5f, 0.42f, 0.25f), 2.f * S);
 	const float Pad = 12.f * S;
-	DrawTextAt(TEXT("ЖИВЫЕ ХОМЯКИ"), HubTitle, Panel.Min.X + Pad, Panel.Min.Y + 14.f * S, FitScale(TEXT("ЖИВЫЕ ХОМЯКИ"), 1.45f * S, Panel.GetSize().X - Pad * 2.f));
 
-	// Living hamsters only (the epitaph is secret while alive and never shown here).
-	TArray<const FCRHamsterPersistentState*> Living;
-	for (const FCRHamsterPersistentState& Hamster : Profile->Hamsters)
-	{
-		if (Hamster.bAlive)
-		{
-			Living.Add(&Hamster);
-		}
-	}
+	// Living hamsters only (dead ones are in the graveyard; the epitaph is secret while alive and never shown here).
+	const TArray<const FCRHamsterPersistentState*> Living = CRMeta::GetLivingHamsters(*Profile);
+	const FString Header = FString::Printf(TEXT("ЖИВЫЕ ХОМЯКИ · %d"), Living.Num());
+	DrawTextAt(Header, HubTitle, Panel.Min.X + Pad, Panel.Min.Y + 14.f * S, FitScale(Header, 1.45f * S, Panel.GetSize().X - Pad * 2.f));
+
+	// Footer: recruitment (always reachable, also with an empty roster).
+	const UCRRecruitmentDefinition* Recruitment = Profiles.GetRecruitment();
+	const FBox2D RecruitRect(FVector2D(Panel.Min.X + Pad, Panel.Max.Y - (HubRosterFooterH - 10.f) * S), FVector2D(Panel.Max.X - Pad, Panel.Max.Y - Pad));
+	const int32 Target = Recruitment ? Recruitment->TargetLivingRosterSize : 0;
+	const bool bCanRecruit = Profiles.CanRecruit();
+	DrawButton(RecruitRect, TEXT("ПОПОЛНЕНИЕ"), ActionOpenRecruitment, FString(), Recruitment != nullptr,
+		bCanRecruit ? ECRUIButtonStyle::Primary : ECRUIButtonStyle::Normal,
+		!Recruitment ? TEXT("недоступно") : (bCanRecruit ? FString::Printf(TEXT("свободных мест: %d"), Target - Living.Num()) : FString(TEXT("убежище заполнено"))));
+
 	const float ListTop = Panel.Min.Y + HubRosterHeaderH * S;
+	const float ListBottom = RecruitRect.Min.Y - 8.f * S;
 	const float RowStep = (HubRosterRowH + HubRosterRowGap) * S;
-	const int32 Visible = FMath::Max(1, FMath::FloorToInt((Panel.Max.Y - ListTop - Pad) / RowStep));
+	const int32 Visible = FMath::Max(1, FMath::FloorToInt((ListBottom - ListTop) / RowStep));
 	RosterMaxScroll = FMath::Max(0, Living.Num() - Visible);
 	RosterScroll = FMath::Clamp(RosterScroll, 0, RosterMaxScroll);
 	if (Living.Num() == 0)
 	{
-		DrawWrapped(TEXT("В убежище не осталось живых хомяков"), HubDim, Panel.Min.X + Pad, ListTop, Panel.GetSize().X - Pad * 2.f, 1.0f * S);
+		float Y = DrawWrapped(TEXT("Некому идти в поход."), HubBad, Panel.Min.X + Pad, ListTop + 10.f * S, Panel.GetSize().X - Pad * 2.f, 1.25f * S);
+		DrawWrapped(TEXT("В убежище не осталось живых хомяков. Примите нового хомяка через «Пополнение»."), HubDim, Panel.Min.X + Pad, Y + 8.f * S,
+			Panel.GetSize().X - Pad * 2.f, 1.0f * S);
 		return;
 	}
 
@@ -403,7 +464,7 @@ void ACRHubHUD::DrawRoster(const UCRProfileSubsystem& Profiles, const FBox2D& Pa
 		const float TextW = Rect.Max.X - TextX - 8.f * S;
 		DrawTextAt(Hamster.DisplayName, bSelected ? HubTitle : HubText, TextX, Rect.Min.Y + 8.f * S, FitScale(Hamster.DisplayName, 1.3f * S, TextW));
 		DrawTextAt(FString::Printf(TEXT("Здоровье %d"), Hamster.BaseMaxHP), HubText, TextX, Rect.Min.Y + 40.f * S, 1.0f * S);
-		DrawTextAt(FString::Printf(TEXT("Мана %d"), Hamster.BaseManaPerTurn), FLinearColor(0.55f, 0.75f, 1.f), TextX, Rect.Min.Y + 64.f * S, 1.0f * S);
+		DrawTextAt(FString::Printf(TEXT("Мана %d"), Hamster.BaseManaPerTurn), HubMana, TextX, Rect.Min.Y + 64.f * S, 1.0f * S);
 		if (bSelected)
 		{
 			DrawTextAt(TEXT("в поход"), HubTitle, Rect.Max.X - TextWidth(TEXT("в поход"), 0.85f * S) - 10.f * S, Rect.Min.Y + 66.f * S, 0.85f * S);
@@ -412,7 +473,7 @@ void ACRHubHUD::DrawRoster(const UCRProfileSubsystem& Profiles, const FBox2D& Pa
 	if (RosterMaxScroll > 0)
 	{
 		DrawTextCentered(FString::Printf(TEXT("%d–%d из %d · колесо мыши"), RosterScroll + 1, FMath::Min(Living.Num(), RosterScroll + Visible), Living.Num()),
-			HubDim, Panel.GetCenter().X, Panel.Max.Y - 26.f * S, 0.85f * S);
+			HubDim, Panel.GetCenter().X, ListBottom - 20.f * S, 0.85f * S);
 	}
 }
 

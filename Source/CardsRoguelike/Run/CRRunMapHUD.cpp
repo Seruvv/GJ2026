@@ -94,9 +94,12 @@ void ACRRunMapHUD::DrawHUD()
 	const float BannerY = Canvas->ClipY * 0.14f;
 	if (bFailed)
 	{
-		DrawPanel(CenterX - 300.f * S, BannerY - 14.f * S, 600.f * S, 110.f * S);
-		DrawTextCentered(TEXT("ЗАБЕГ ПРОВАЛЕН"), FLinearColor(1.f, 0.3f, 0.25f), CenterX, BannerY, 2.2f * S);
-		DrawTextCentered(FString::Printf(TEXT("%s погиб. Комната: %s"), *State.Hamster.Name, *RoomName), RunHudDimTextColor, CenterX, BannerY + 52.f * S, 1.2f * S);
+		// The epitaph is deliberately not shown here: it is revealed in the sanctuary's graveyard.
+		DrawPanel(CenterX - 330.f * S, BannerY - 14.f * S, 660.f * S, 146.f * S);
+		DrawTextCentered(TEXT("ХОМЯК ПОГИБ"), FLinearColor(1.f, 0.3f, 0.25f), CenterX, BannerY, 2.2f * S);
+		DrawTextCentered(State.Hamster.Name, RunHudTextColor, CenterX, BannerY + 52.f * S, 1.5f * S);
+		DrawTextCentered(FString::Printf(TEXT("%s · комната: %s"), *CRRun::DeathCauseDisplayText(State.DeathCause), *RoomName),
+			RunHudDimTextColor, CenterX, BannerY + 90.f * S, 1.15f * S);
 	}
 	else if (Map && !Map->GetArrivalTitle().IsEmpty())
 	{
@@ -155,7 +158,9 @@ void ACRRunMapHUD::DrawProfileRunControls(const FCRRunState& State, float S)
 		const UCRProfileSaveGame* Profile = Profiles ? Profiles->GetActiveProfile() : nullptr;
 		if (Profile && Profile->LastRun.bValid && Profile->LastRun.RunSeed == State.RunSeed)
 		{
-			Sub = FString::Printf(TEXT("доставлено: %s"), *CRMeta::FormatGain(Profile->LastRun.Delivered));
+			Sub = Profile->LastRun.Delivered.IsZero() && Profile->LastRun.Reason == ECRRunEndReason::Failed
+				? FString(TEXT("вся добыча потеряна · доставлено: ничего"))
+				: FString::Printf(TEXT("доставлено: %s"), *CRMeta::FormatGain(Profile->LastRun.Delivered));
 		}
 		const float CenterX = Canvas->ClipX * 0.5f;
 		ReturnRect = FBox2D(FVector2D(CenterX - 230.f * S, Canvas->ClipY - 170.f * S), FVector2D(CenterX + 230.f * S, Canvas->ClipY - 88.f * S));

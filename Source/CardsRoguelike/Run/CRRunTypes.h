@@ -31,6 +31,17 @@ enum class ECRRunEndReason : uint8
 	Abandoned
 };
 
+/** What killed the hamster of a failed run. Coarse on purpose; detailed killer attribution can extend it later. */
+UENUM(BlueprintType)
+enum class ECRHamsterDeathCause : uint8
+{
+	None,
+	/** Died in a combat room. */
+	Combat,
+	/** Died from an event choice. */
+	Event
+};
+
 /** Distinguishes "no run yet" from "a run that ended", so a failed run is not silently replaced. */
 UENUM(BlueprintType)
 enum class ECRRunStatus : uint8
@@ -301,6 +312,14 @@ struct FCRRunState
 	/** Why the run ended (valid once bEndReported). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
 	ECRRunEndReason EndReason = ECRRunEndReason::Completed;
+
+	/** Unique per started run; the profile uses it to apply a run's end exactly once. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString RunId;
+
+	/** What killed the hamster (Failed runs only). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	ECRHamsterDeathCause DeathCause = ECRHamsterDeathCause::None;
 };
 
 namespace CRRun
@@ -310,6 +329,8 @@ namespace CRRun
 	/** Player-facing (Russian) room type name for the run map UI. */
 	FString RoomTypeDisplayName(ECRRoomType Type);
 	FLinearColor RoomTypeColor(ECRRoomType Type);
+	/** Player-facing (Russian) death line: "Погиб в бою" / "Погиб во время события". */
+	FString DeathCauseDisplayText(ECRHamsterDeathCause Cause);
 
 	/** Hamster and deck every run starts from (before hub bonuses). */
 	constexpr int32 BaseHamsterMaxHP = 30;

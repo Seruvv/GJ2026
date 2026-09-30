@@ -64,10 +64,29 @@ public:
 	bool SelectHamster(FName HamsterId);
 	/** What the next run starts with: the selected hamster's stats plus hub bonuses (for the preview and the run). */
 	bool GetNextRunStartConfig(FCRRunStartConfig& OutConfig) const;
+	int32 GetLivingHamsterCount() const;
+
+	// Graveyard (active profile)
+
+	/** Dead hamsters not yet seen in the graveyard (the hub marks them as new). */
+	int32 GetUnseenGraveCount() const;
+	/** The player opened the graveyard: every current death counts as seen. */
+	void MarkGraveyardSeen();
+
+	// Recruitment (active profile)
+
+	const UCRRecruitmentDefinition* GetRecruitment() const;
+	/** True while the living roster is below the recruitment target. */
+	bool CanRecruit() const;
+	/** Hires a saved candidate (free in this prototype) and saves. OutMessage is player-facing feedback. */
+	bool RecruitCandidate(FName CandidateId, FString& OutMessage);
 
 	// Runs
 
-	/** Starts a fresh run for the active profile. The caller then opens the run map. */
+	/**
+	 * Starts a fresh run for the active profile with a living hamster (falls back to another living one if the
+	 * selection is invalid). Refuses, starting nothing, when no living hamster exists. The caller opens the run map.
+	 */
 	bool StartRunFromHub();
 
 	/** Broadcast after any change to the active profile (and when the active profile changes). */

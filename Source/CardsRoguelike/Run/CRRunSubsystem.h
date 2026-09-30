@@ -84,7 +84,10 @@ public:
 	 */
 	bool CommitEventChoice(FName EventNodeId, const UCREventDefinition* Event, int32 ChoiceIndex, int32 SacrificeDeckIndex);
 
-	/** Completes the current event room after its result was shown. Only valid once a choice is committed. */
+	/**
+	 * Completes the current event room after its result was shown. Only valid once a choice is committed and
+	 * the hamster survived it (a lethal choice already failed the run inside CommitEventChoice).
+	 */
 	bool ContinueFromEvent(FName EventNodeId);
 
 	/** Only Available nodes can be entered; there is no backtracking. */
@@ -99,8 +102,11 @@ public:
 	/** Resolves the current room: it becomes Completed and its outgoing rooms Available. */
 	bool CompleteCurrentRoom();
 
-	/** Ends the run as failed. The state is kept for inspection; nothing restarts automatically. */
-	void FailCurrentRun();
+	/** Ends the run as failed (the hamster died of Cause). The state is kept for inspection; nothing restarts automatically. */
+	void FailCurrentRun(ECRHamsterDeathCause Cause = ECRHamsterDeathCause::Combat);
+
+	/** True once the run failed (the hamster is dead). */
+	bool IsRunFailed() const { return RunState.Status == ECRRunStatus::Failed; }
 
 	void SetHamsterHP(int32 CurrentHP);
 
@@ -115,6 +121,11 @@ public:
 
 	FCROnRunEnded OnRunEnded;
 
+#if WITH_DEV_AUTOMATION_TESTS
+	/** Automation tests only: direct access to set up a room situation without playing to it. */
+	FCRRunState& GetMutableRunStateForTests() { return RunState; }
+#endif
+
 private:
 	/** Picks the seed for a normal new run (outside the graph stream). */
 	static int32 MakeRandomRunSeed();
@@ -127,13 +138,6 @@ private:
 
 	/** Mutable state of the event the hamster is currently standing in (unresolved, initialized), or nullptr. */
 	FCREventNodeState* GetActiveEventState(FName EventNodeId);
-
-	/**
-	 * TEMPORARY safety guard until the event-death (Graveyard) milestone: event choices that would bring
-	 * HP to 0 or below are disabled, because a lethal event result has no resolution flow yet. The data
-	 * model allows lethal effects; replace this guard with the death flow, do not turn it into a clamp.
-	 */
-	static bool WouldEventChoiceBeLethal(int32 CurrentHP, int32 HPDelta);
 
 	/** Read-only in the editor/MCP for debugging during PIE. */
 	UPROPERTY(VisibleInstanceOnly, Category = "CR|Run")

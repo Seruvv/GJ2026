@@ -129,10 +129,11 @@ FString UCRProfileSubsystem::CreateProfile(const FString& DisplayName)
 		}
 	}
 
-	// Hamsters: the default roster, with the first one selected.
+	// Hamsters: the default roster, with the first one selected, and the saved recruitment candidates.
 	Profile->SaveVersion = CRMeta::CurrentProfileSaveVersion;
 	Profile->bHamsterRosterInitialized = CRMeta::InitializeHamsterRoster(*Profile, GetCatalog());
 	CRMeta::EnsureValidHamsterSelection(*Profile);
+	CRMeta::RefillRecruitCandidates(*Profile, GetRecruitment());
 
 	FCRProfileSummary Summary;
 	Summary.ProfileId = ProfileId;
@@ -170,8 +171,9 @@ bool UCRProfileSubsystem::SelectProfile(const FString& ProfileId)
 	const bool bHadRoster = Profile->bHamsterRosterInitialized;
 	if (CRMeta::MigrateProfile(*Profile, GetCatalog()))
 	{
-		UE_LOG(LogCRProfile, Log, TEXT("Profile %s migrated: version %d -> %d, roster %s (%d hamsters), selected %s"), *ProfileId, VersionBefore,
-			Profile->SaveVersion, bHadRoster ? TEXT("kept") : TEXT("added"), Profile->Hamsters.Num(), *Profile->SelectedHamsterId.ToString());
+		UE_LOG(LogCRProfile, Log, TEXT("Profile %s migrated: version %d -> %d, roster %s (%d hamsters, %d alive), %d recruit candidates, selected %s"),
+			*ProfileId, VersionBefore, Profile->SaveVersion, bHadRoster ? TEXT("kept") : TEXT("added"), Profile->Hamsters.Num(),
+			CRMeta::CountLivingHamsters(*Profile), Profile->RecruitCandidates.Num(), *Profile->SelectedHamsterId.ToString());
 	}
 	ActiveProfile = Profile;
 	Index->LastSelectedProfileId = ProfileId;
@@ -363,21 +365,97 @@ bool UCRProfileSubsystem::GetNextRunStartConfig(FCRRunStartConfig& OutConfig) co
 	return true;
 }
 
+int32 UCRProfileSubsystem::GetLivingHamsterCount() const
+{
+	return ActiveProfile ? CRMeta::CountLivingHamsters(*ActiveProfile) : 0;
+}
+
+int32 UCRProfileSubsystem::GetUnseenGraveCount() const
+{
+	return ActiveProfile ? CRMeta::CountUnseenGraves(*ActiveProfile) : 0;
+}
+
+void UCRProfileSubsystem::MarkGraveyardSeen()
+{
+	if (!ActiveProfile || CRMeta::CountUnseenGraves(*ActiveProfile) == 0)
+	{
+		return;
+	}
+	ActiveProfile->GraveyardSeenCount = ActiveProfile->Hamsters.Num() - CRMeta::CountLivingHamsters(*ActiveProfile);
+	SaveActiveProfile();
+	OnProfileChanged.Broadcast();
+}
+
+const UCRRecruitmentDefinition* UCRProfileSubsystem::GetRecruitment() const
+{
+	const UCRHubCatalog* Catalog = GetCatalog();
+	return Catalog ? Catalog->Recruitment.Get() : nullptr;
+}
+
+bool UCRProfileSubsystem::CanRecruit() const
+{
+	return ActiveProfile && CRMeta::CanRecruit(*ActiveProfile, GetRecruitment());
+}
+
+bool UCRProfileSubsystem::RecruitCandidate(FName CandidateId, FString& OutMessage)
+{
+	const UCRRecruitmentDefinition* Recruitment = GetRecruitment();
+	if (!ActiveProfile || !Recruitment)
+	{
+		OutMessage = TEXT("Пополнение недоступно");
+		return false;
+	}
+	if (!CRMeta::CanRecruit(*ActiveProfile, Recruitment))
+	{
+		OutMessage = TEXT("В убежище достаточно хомяков");
+		return false;
+	}
+	const FCRHamsterPersistentState* Candidate = ActiveProfile->RecruitCandidates.FindByPredicate(
+		[CandidateId](const FCRHamsterPersistentState& C) { return C.HamsterId == CandidateId; });
+	const FString Name = Candidate ? Candidate->DisplayName : FString();
+	if (!CRMeta::RecruitCandidate(*ActiveProfile, Recruitment, CandidateId))
+	{
+		OutMessage = TEXT("Этого хомяка нельзя принять");
+		return false;
+	}
+	SaveActiveProfile();
+	const FCRHamsterPersistentState* Recruit = CRMeta::FindHamster(*ActiveProfile, CandidateId);
+	UE_LOG(LogCRProfile, Log, TEXT("Recruited %s '%s' (HP %d, mana %d) into %s: %d alive, selected %s, %d candidates"), *CandidateId.ToString(), *Name,
+		Recruit ? Recruit->BaseMaxHP : 0, Recruit ? Recruit->BaseManaPerTurn : 0, *ActiveProfile->ProfileId, CRMeta::CountLivingHamsters(*ActiveProfile),
+		*ActiveProfile->SelectedHamsterId.ToString(), ActiveProfile->RecruitCandidates.Num());
+	OutMessage = FString::Printf(TEXT("%s теперь живёт в убежище"), *Name);
+	OnProfileChanged.Broadcast();
+	return true;
+}
+
 bool UCRProfileSubsystem::StartRunFromHub()
 {
 	UCRRunSubsystem* Run = GetGameInstance()->GetSubsystem<UCRRunSubsystem>();
-	FCRRunStartConfig Config;
-	if (!ActiveProfile || !Run || !GetNextRunStartConfig(Config))
+	if (!ActiveProfile || !Run)
 	{
+		return false;
+	}
+	// Only a living hamster can go: repair an invalid or dead selection first, refuse if nobody is alive.
+	if (CRMeta::EnsureValidHamsterSelection(*ActiveProfile))
+	{
+		SaveActiveProfile();
+		OnProfileChanged.Broadcast();
+	}
+	FCRRunStartConfig Config;
+	if (!GetNextRunStartConfig(Config))
+	{
+		UE_LOG(LogCRProfile, Warning, TEXT("Run not started for %s: no living hamster"), *ActiveProfile->ProfileId);
 		return false;
 	}
 	// Any leftover run (a finished one, or an unfinished one from before) is cleared first; an unfinished
 	// run is reported as abandoned so its end is still accounted for.
 	Run->AbandonRun();
 	ActiveProfile->Stats.RunsStarted++;
+	CRMeta::RecordHamsterRunStart(*ActiveProfile, Config.HamsterId);
 	SaveActiveProfile();
 	Run->StartProfileRun(Config);
-	UE_LOG(LogCRProfile, Log, TEXT("Run %d started from the hub for %s"), ActiveProfile->Stats.RunsStarted, *ActiveProfile->ProfileId);
+	UE_LOG(LogCRProfile, Log, TEXT("Run %d started from the hub for %s with %s"), ActiveProfile->Stats.RunsStarted, *ActiveProfile->ProfileId,
+		*Config.HamsterId.ToString());
 	return true;
 }
 
@@ -385,7 +463,7 @@ void UCRProfileSubsystem::HandleRunEnded(const FCRRunState& EndedRun)
 {
 	if (EndedRun.ProfileId.IsEmpty())
 	{
-		return; // developer run opened straight on the run map
+		return; // developer run opened straight on the run map: no persistent hamster, no persistent death
 	}
 	if ((!ActiveProfile || ActiveProfile->ProfileId != EndedRun.ProfileId) && !SelectProfile(EndedRun.ProfileId))
 	{
@@ -394,32 +472,22 @@ void UCRProfileSubsystem::HandleRunEnded(const FCRRunState& EndedRun)
 	}
 
 	const UCRHubCatalog* Catalog = GetCatalog();
-	int32 KeepPercent = 100;
-	switch (EndedRun.EndReason)
+	if (!CRMeta::ApplyRunEnd(*ActiveProfile, Catalog, EndedRun, FDateTime::Now()))
 	{
-	case ECRRunEndReason::Completed: KeepPercent = Catalog ? Catalog->CompletedRunKeepPercent : 100; ActiveProfile->Stats.RunsCompleted++; break;
-	case ECRRunEndReason::Failed:    KeepPercent = Catalog ? Catalog->FailedRunKeepPercent : 50;     ActiveProfile->Stats.RunsFailed++; break;
-	case ECRRunEndReason::Abandoned: KeepPercent = Catalog ? Catalog->AbandonedRunKeepPercent : 0;   ActiveProfile->Stats.RunsAbandoned++; break;
+		UE_LOG(LogCRProfile, Warning, TEXT("Run %s end was already applied to %s; ignored"), *EndedRun.RunId, *ActiveProfile->ProfileId);
+		return;
 	}
-
-	FCRRunEndSummary Summary;
-	Summary.bValid = true;
-	Summary.Reason = EndedRun.EndReason;
-	Summary.RunSeed = EndedRun.RunSeed;
-	Summary.RoomsVisited = FMath::Max(0, EndedRun.VisitedNodeIds.Num() - 1);
-	Summary.Carried.Silver = EndedRun.Carried.Silver;
-	Summary.Carried.Food = EndedRun.Carried.Food;
-	Summary.Carried.Wood = EndedRun.Carried.Wood;
-	Summary.Delivered.Silver = CRMeta::ApplyKeepPercent(Summary.Carried.Silver, KeepPercent);
-	Summary.Delivered.Food = CRMeta::ApplyKeepPercent(Summary.Carried.Food, KeepPercent);
-	Summary.Delivered.Wood = CRMeta::ApplyKeepPercent(Summary.Carried.Wood, KeepPercent);
-
-	ActiveProfile->Resources.Add(Summary.Delivered);
-	ActiveProfile->LastRun = Summary;
 	SaveActiveProfile();
+	const FCRRunEndSummary& Summary = ActiveProfile->LastRun;
 	UE_LOG(LogCRProfile, Log, TEXT("Run end (%s) delivered to %s at %d%%: carried S%d F%d W%d -> +S%d F%d W%d, profile now Silver %d, Food %d, Wood %d"),
-		*UEnum::GetValueAsString(EndedRun.EndReason), *ActiveProfile->ProfileId, KeepPercent,
+		*UEnum::GetValueAsString(EndedRun.EndReason), *ActiveProfile->ProfileId, CRMeta::GetKeepPercent(Catalog, EndedRun.EndReason),
 		Summary.Carried.Silver, Summary.Carried.Food, Summary.Carried.Wood, Summary.Delivered.Silver, Summary.Delivered.Food, Summary.Delivered.Wood,
 		ActiveProfile->Resources.Silver, ActiveProfile->Resources.Food, ActiveProfile->Resources.Wood);
+	if (EndedRun.EndReason == ECRRunEndReason::Failed)
+	{
+		UE_LOG(LogCRProfile, Log, TEXT("Hamster %s '%s' died permanently (%s in %s); %d alive, selected now %s"), *EndedRun.Hamster.HamsterId.ToString(),
+			*EndedRun.Hamster.Name, *UEnum::GetValueAsString(EndedRun.DeathCause), *EndedRun.CurrentNodeId.ToString(),
+			CRMeta::CountLivingHamsters(*ActiveProfile), *ActiveProfile->SelectedHamsterId.ToString());
+	}
 	OnProfileChanged.Broadcast();
 }

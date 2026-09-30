@@ -132,7 +132,7 @@ void ACRCombatGameMode::OnCombatResolved(bool bVictory)
 	}
 
 	Run->SetHamsterHP(0);
-	Run->FailCurrentRun();
+	Run->FailCurrentRun(ECRHamsterDeathCause::Combat);
 	GetWorldTimerManager().SetTimer(ReturnToRunTimer, this, &ACRCombatGameMode::ReturnToRunMap, FMath::Max(RunReturnDelay, 0.01f), false);
 }
 

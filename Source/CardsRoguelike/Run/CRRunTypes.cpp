@@ -30,6 +30,16 @@ namespace CRRun
 		return TEXT("?");
 	}
 
+	FString DeathCauseDisplayText(ECRHamsterDeathCause Cause)
+	{
+		switch (Cause)
+		{
+		case ECRHamsterDeathCause::Combat: return TEXT("Погиб в бою");
+		case ECRHamsterDeathCause::Event:  return TEXT("Погиб во время события");
+		default:                           return TEXT("Погиб в походе");
+		}
+	}
+
 	FCRRunStartConfig MakeDeveloperStartConfig()
 	{
 		FCRRunStartConfig Config;
