@@ -210,6 +210,8 @@ namespace CRMeta
 	FString GetRevealedEpitaph(const FCRHamsterPersistentState& Hamster);
 	/** Dead hamsters the player has not seen in the graveyard yet. */
 	int32 CountUnseenGraves(const UCRProfileSaveGame& Profile);
+	/** Selects a living hamster. Returns false (selection unchanged) if the id is unknown or the hamster is dead. */
+	bool SelectHamster(UCRProfileSaveGame& Profile, FName HamsterId);
 
 	/**
 	 * Marks the hamster dead with its death record and moves the selection to a living hamster (or clears it).

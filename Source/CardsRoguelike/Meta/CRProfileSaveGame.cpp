@@ -1,4 +1,4 @@
-#include "CRProfileSaveGame.h"
+﻿#include "CRProfileSaveGame.h"
 
 #include "Misc/Guid.h"
 
@@ -64,6 +64,17 @@ namespace CRMeta
 	int32 CountUnseenGraves(const UCRProfileSaveGame& Profile)
 	{
 		return FMath::Max(0, (Profile.Hamsters.Num() - CountLivingHamsters(Profile)) - Profile.GraveyardSeenCount);
+	}
+
+	bool SelectHamster(UCRProfileSaveGame& Profile, FName HamsterId)
+	{
+		const FCRHamsterPersistentState* Hamster = FindHamster(Profile, HamsterId);
+		if (!Hamster || !Hamster->bAlive)
+		{
+			return false;
+		}
+		Profile.SelectedHamsterId = HamsterId;
+		return true;
 	}
 
 	bool InitializeHamsterRoster(UCRProfileSaveGame& Profile, const UCRHubCatalog* Catalog)

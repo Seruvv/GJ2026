@@ -172,13 +172,13 @@ void ACRHubHUD::DrawTopBar(const UCRProfileSubsystem& Profiles)
 		switch (Run.Reason)
 		{
 		case ECRRunEndReason::Completed:
-			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: хомяк вернулся в убежище")) : FString::Printf(TEXT("Хомяк вернулся из похода: %s"), *Run.HamsterName);
+			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: хомяк вернулся в убежище")) : FString::Printf(TEXT("%s вернулся из похода."), *Run.HamsterName);
 			break;
 		case ECRRunEndReason::Failed:
-			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: хомяк погиб")) : FString::Printf(TEXT("Хомяк погиб в походе: %s"), *Run.HamsterName);
+			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: хомяк погиб")) : FString::Printf(TEXT("%s погиб в походе."), *Run.HamsterName);
 			break;
 		default:
-			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: прерван")) : FString::Printf(TEXT("Поход прерван, хомяк жив: %s"), *Run.HamsterName);
+			Outcome = Run.HamsterName.IsEmpty() ? FString(TEXT("Последний поход: прерван")) : FString::Printf(TEXT("%s прервал поход и вернулся живым."), *Run.HamsterName);
 			break;
 		}
 		DrawTextAt(Outcome, Run.Reason == ECRRunEndReason::Completed ? HubGood : HubBad, X, Y, FitScale(Outcome, 1.15f * S, TopW - 12.f * S));
@@ -390,7 +390,7 @@ void ACRHubHUD::DrawBottomBar(const UCRProfileSubsystem& Profiles, float SceneCe
 		// New deaths since the last visit are marked so the consequence is discoverable.
 		const int32 Dead = Profile->Hamsters.Num() - Profiles.GetLivingHamsterCount();
 		const int32 Unseen = Profiles.GetUnseenGraveCount();
-		const FString Label = Dead > 0 ? FString::Printf(TEXT("Кладбище · %d"), Dead) : FString(TEXT("Кладбище"));
+		const FString Label = Dead > 0 ? FString::Printf(TEXT("КЛАДБИЩЕ · %d"), Dead) : FString(TEXT("КЛАДБИЩЕ"));
 		DrawButton(FBox2D(FVector2D(BX, H - 100.f * S), FVector2D(BX + SmallW, H - 50.f * S)), Label, ActionOpenGraveyard, FString(), true,
 			Unseen > 0 ? ECRUIButtonStyle::Danger : ECRUIButtonStyle::Normal, Unseen > 0 ? TEXT("новая запись") : FString());
 		BX += SmallW + Gap;
@@ -477,22 +477,241 @@ void ACRHubHUD::DrawRoster(const UCRProfileSubsystem& Profiles, const FBox2D& Pa
 	}
 }
 
-void ACRHubHUD::DrawPortrait(const FCRHamsterPersistentState& Hamster, const FBox2D& Rect)
+void ACRHubHUD::DrawPortrait(const FCRHamsterPersistentState& Hamster, const FBox2D& Rect, bool bFaded)
 {
+	// Faded (dead): the tint is washed out towards grey and darkened.
+	FLinearColor Tint = Hamster.AvatarTint;
+	if (bFaded)
+	{
+		const float Grey = Tint.GetLuminance();
+		Tint = FLinearColor::LerpUsingHSV(Tint, FLinearColor(Grey, Grey, Grey), 0.8f) * 0.6f;
+		Tint.A = 1.f;
+	}
 	const FVector2D Size = Rect.GetSize();
 	if (UTexture2D* Texture = GetAvatarTexture(Hamster))
 	{
-		DrawTexture(Texture, Rect.Min.X, Rect.Min.Y, Size.X, Size.Y, 0.f, 0.f, 1.f, 1.f);
-		DrawFrame(Rect, Hamster.AvatarTint, 2.f * S);
+		DrawTexture(Texture, Rect.Min.X, Rect.Min.Y, Size.X, Size.Y, 0.f, 0.f, 1.f, 1.f, bFaded ? FLinearColor(0.45f, 0.45f, 0.45f) : FLinearColor::White);
+		DrawFrame(Rect, Tint, 2.f * S);
 		return;
 	}
 	// Placeholder: tinted frame, darker inner face and the initial.
-	DrawBox(Rect, Hamster.AvatarTint);
+	DrawBox(Rect, Tint);
 	const FBox2D Inner(Rect.Min + FVector2D(4.f * S), Rect.Max - FVector2D(4.f * S));
-	DrawBox(Inner, FLinearColor::LerpUsingHSV(Hamster.AvatarTint, FLinearColor::Black, 0.55f));
+	DrawBox(Inner, FLinearColor::LerpUsingHSV(Tint, FLinearColor::Black, 0.55f));
 	const FString Initial = Hamster.DisplayName.Left(1).ToUpper();
-	const float Scale = 2.4f * S;
-	DrawTextCentered(Initial, Hamster.AvatarTint * 1.4f, Rect.GetCenter().X, Rect.GetCenter().Y - TextHeight(Scale) * 0.5f, Scale);
+	const float Scale = FMath::Min(2.4f * S, Size.Y / 40.f);
+	DrawTextCentered(Initial, Tint * 1.4f, Rect.GetCenter().X, Rect.GetCenter().Y - TextHeight(Scale) * 0.5f, Scale);
+}
+
+void ACRHubHUD::OpenView(EHubView NewView, UCRProfileSubsystem& Profiles)
+{
+	View = NewView;
+	GraveScroll = 0;
+	if (NewView == EHubView::Graveyard)
+	{
+		// Start on the most recent death; opening the graveyard counts every current death as seen.
+		const UCRProfileSaveGame* Profile = Profiles.GetActiveProfile();
+		const TArray<const FCRHamsterPersistentState*> Graves = Profile ? CRMeta::GetGraveyard(*Profile) : TArray<const FCRHamsterPersistentState*>();
+		SelectedGraveId = Graves.Num() > 0 ? Graves[0]->HamsterId : NAME_None;
+		Profiles.MarkGraveyardSeen();
+	}
+}
+
+FBox2D ACRHubHUD::DrawOverlayFrame(const FString& Title, const FString& Subtitle)
+{
+	// Dim the whole sanctuary, then one large panel with the title and НАЗАД in its header.
+	DrawBox(FBox2D(FVector2D::ZeroVector, FVector2D(Canvas->ClipX, Canvas->ClipY)), FLinearColor(0.f, 0.f, 0.f, 0.72f));
+	const FBox2D Panel(FVector2D(80.f * S, 60.f * S), FVector2D(Canvas->ClipX - 80.f * S, Canvas->ClipY - 150.f * S));
+	DrawBox(Panel, FLinearColor(0.035f, 0.035f, 0.05f, 0.96f));
+	DrawFrame(Panel, FLinearColor(0.5f, 0.42f, 0.25f), 2.f * S);
+
+	const float Pad = 28.f * S;
+	const FBox2D BackRect(FVector2D(Panel.Max.X - Pad - 220.f * S, Panel.Min.Y + 22.f * S), FVector2D(Panel.Max.X - Pad, Panel.Min.Y + 80.f * S));
+	DrawButton(BackRect, TEXT("НАЗАД"), ActionBack, FString(), true, ECRUIButtonStyle::Normal, TEXT("в убежище"));
+	const float TitleW = BackRect.Min.X - Panel.Min.X - Pad * 2.f;
+	DrawTextAt(Title, HubTitle, Panel.Min.X + Pad, Panel.Min.Y + 20.f * S, FitScale(Title, 2.2f * S, TitleW));
+	DrawTextAt(Subtitle, HubDim, Panel.Min.X + Pad, Panel.Min.Y + 74.f * S, FitScale(Subtitle, 1.05f * S, TitleW));
+	return FBox2D(FVector2D(Panel.Min.X + Pad, Panel.Min.Y + 118.f * S), FVector2D(Panel.Max.X - Pad, Panel.Max.Y - Pad));
+}
+
+void ACRHubHUD::DrawGraveyard(const UCRProfileSubsystem& Profiles)
+{
+	const UCRProfileSaveGame* Profile = Profiles.GetActiveProfile();
+	const TArray<const FCRHamsterPersistentState*> Graves = CRMeta::GetGraveyard(*Profile);
+	const FBox2D Content = DrawOverlayFrame(TEXT("КЛАДБИЩЕ"),
+		Graves.Num() == 0 ? FString(TEXT("Здесь пока никто не покоится."))
+			: FString::Printf(TEXT("Павших хомяков: %d · выберите могилу, чтобы прочитать эпитафию"), Graves.Num()));
+	if (Graves.Num() == 0)
+	{
+		GraveListRect = FBox2D(ForceInit);
+		DrawWrapped(TEXT("Все хомяки убежища живы. Хомяк, погибший в походе, остаётся здесь навсегда вместе со своей эпитафией."),
+			HubDim, Content.Min.X, Content.Min.Y + 20.f * S, Content.GetSize().X * 0.6f, 1.1f * S);
+		return;
+	}
+
+	// Left: the graves, most recent death first. Right: the selected grave.
+	const float ListW = FMath::Min(460.f * S, Content.GetSize().X * 0.4f);
+	GraveListRect = FBox2D(Content.Min, FVector2D(Content.Min.X + ListW, Content.Max.Y));
+	const FBox2D DetailsRect(FVector2D(GraveListRect.Max.X + 24.f * S, Content.Min.Y), Content.Max);
+
+	const float RowH = 96.f * S;
+	const float RowStep = RowH + 8.f * S;
+	const int32 Visible = FMath::Max(1, FMath::FloorToInt((GraveListRect.GetSize().Y - 30.f * S) / RowStep));
+	GraveMaxScroll = FMath::Max(0, Graves.Num() - Visible);
+	GraveScroll = FMath::Clamp(GraveScroll, 0, GraveMaxScroll);
+
+	const FCRHamsterPersistentState* Selected = nullptr;
+	for (const FCRHamsterPersistentState* Grave : Graves)
+	{
+		if (Grave->HamsterId == SelectedGraveId)
+		{
+			Selected = Grave;
+		}
+	}
+	if (!Selected)
+	{
+		Selected = Graves[0];
+		SelectedGraveId = Selected->HamsterId;
+	}
+
+	for (int32 Row = 0; Row < Visible && GraveScroll + Row < Graves.Num(); ++Row)
+	{
+		const FCRHamsterPersistentState& Grave = *Graves[GraveScroll + Row];
+		const FBox2D Rect(FVector2D(GraveListRect.Min.X, GraveListRect.Min.Y + Row * RowStep), FVector2D(GraveListRect.Max.X, GraveListRect.Min.Y + Row * RowStep + RowH));
+		const bool bSelected = &Grave == Selected;
+		const bool bHovered = RegisterButton(Rect, ActionSelectGrave, Grave.HamsterId.ToString());
+		DrawBox(Rect, bSelected ? FLinearColor(0.2f, 0.17f, 0.14f, 0.95f) : (bHovered ? FLinearColor(0.16f, 0.16f, 0.2f, 0.95f) : FLinearColor(0.08f, 0.08f, 0.1f, 0.9f)));
+		DrawFrame(Rect, bSelected ? HubEpitaph : (bHovered ? FLinearColor::White : FLinearColor(0.28f, 0.28f, 0.32f)), (bSelected ? 3.f : 2.f) * S);
+
+		const float PortraitSize = RowH - 16.f * S;
+		const FBox2D Portrait(FVector2D(Rect.Min.X + 10.f * S, Rect.Min.Y + 8.f * S), FVector2D(Rect.Min.X + 10.f * S + PortraitSize, Rect.Min.Y + 8.f * S + PortraitSize));
+		DrawPortrait(Grave, Portrait, true);
+		const float TextX = Portrait.Max.X + 12.f * S;
+		const float TextW = Rect.Max.X - TextX - 8.f * S;
+		DrawTextAt(Grave.DisplayName, bSelected ? HubTitle : HubText, TextX, Rect.Min.Y + 8.f * S, FitScale(Grave.DisplayName, 1.3f * S, TextW));
+		const FString Cause = CRRun::DeathCauseDisplayText(Grave.Death.DeathCause);
+		DrawTextAt(Cause, HubBad, TextX, Rect.Min.Y + 40.f * S, FitScale(Cause, 1.0f * S, TextW));
+		const FString When = Grave.Death.bValid ? Grave.Death.DeathTimestamp.ToString(TEXT("%d.%m.%Y %H:%M")) : FString(TEXT("дата неизвестна"));
+		DrawTextAt(When, HubDim, TextX, Rect.Min.Y + 66.f * S, FitScale(When, 0.9f * S, TextW));
+	}
+	if (GraveMaxScroll > 0)
+	{
+		DrawTextCentered(FString::Printf(TEXT("%d–%d из %d · колесо мыши"), GraveScroll + 1, FMath::Min(Graves.Num(), GraveScroll + Visible), Graves.Num()),
+			HubDim, GraveListRect.GetCenter().X, GraveListRect.Max.Y - 24.f * S, 0.85f * S);
+	}
+
+	DrawGraveDetails(*Selected, DetailsRect);
+}
+
+void ACRHubHUD::DrawGraveDetails(const FCRHamsterPersistentState& Hamster, const FBox2D& Panel)
+{
+	DrawBox(Panel, FLinearColor(0.06f, 0.055f, 0.06f, 0.95f));
+	DrawFrame(Panel, FLinearColor(0.4f, 0.36f, 0.3f), 2.f * S);
+	const float Pad = 24.f * S;
+	const float PortraitSize = 150.f * S;
+	const FBox2D Portrait(Panel.Min + FVector2D(Pad), Panel.Min + FVector2D(Pad + PortraitSize));
+	DrawPortrait(Hamster, Portrait, true);
+
+	// Beside the portrait: who, how, and their base stats.
+	const float X = Portrait.Max.X + 22.f * S;
+	const float W = Panel.Max.X - X - Pad;
+	float Y = Panel.Min.Y + Pad;
+	DrawTextAt(Hamster.DisplayName, HubTitle, X, Y, FitScale(Hamster.DisplayName, 2.f * S, W));
+	Y += 50.f * S;
+	const FString Cause = CRRun::DeathCauseDisplayText(Hamster.Death.DeathCause);
+	DrawTextAt(Cause, HubBad, X, Y, FitScale(Cause, 1.3f * S, W));
+	Y += 36.f * S;
+	DrawTextAt(FString::Printf(TEXT("Здоровье %d"), Hamster.BaseMaxHP), HubText, X, Y, 1.1f * S);
+	DrawTextAt(FString::Printf(TEXT("Мана %d"), Hamster.BaseManaPerTurn), HubMana, X + 180.f * S, Y, 1.1f * S);
+
+	// The death record.
+	const FCRHamsterDeathRecord& Death = Hamster.Death;
+	float LineY = Portrait.Max.Y + 20.f * S;
+	const float LineX = Panel.Min.X + Pad;
+	const float LineW = Panel.GetSize().X - Pad * 2.f;
+	TArray<FString> Facts;
+	if (Death.bValid)
+	{
+		Facts.Add(FString::Printf(TEXT("Дата смерти: %s"), *Death.DeathTimestamp.ToString(TEXT("%d.%m.%Y %H:%M"))));
+		Facts.Add(FString::Printf(TEXT("Поход: сид %d · пройдено комнат: %d"), Death.RunSeed, Death.RoomsVisited));
+		Facts.Add(FString::Printf(TEXT("Место гибели: %s (%s)"), *CRRun::RoomTypeDisplayName(Death.RoomType), *Death.NodeId.ToString()));
+		Facts.Add(FString::Printf(TEXT("Потеряно: %s"), Death.LostLoot.IsZero() ? TEXT("ничего") : *CRMeta::FormatResources(Death.LostLoot)));
+	}
+	else
+	{
+		Facts.Add(TEXT("Обстоятельства гибели неизвестны."));
+	}
+	for (const FString& Fact : Facts)
+	{
+		LineY = DrawWrapped(Fact, HubText, LineX, LineY, LineW, 1.05f * S) + 2.f * S;
+	}
+
+	// The reveal: the epitaph was written when the hamster was created and is only ever shown here.
+	LineY += 22.f * S;
+	DrawBox(FBox2D(FVector2D(LineX, LineY), FVector2D(LineX + LineW, LineY + 2.f * S)), FLinearColor(0.5f, 0.42f, 0.25f));
+	LineY += 16.f * S;
+	DrawTextAt(TEXT("ЭПИТАФИЯ"), HubTitle, LineX, LineY, 1.4f * S);
+	LineY += 44.f * S;
+	const FString Epitaph = CRMeta::GetRevealedEpitaph(Hamster);
+	DrawWrapped(Epitaph.IsEmpty() ? FString(TEXT("(без эпитафии)")) : FString::Printf(TEXT("«%s»"), *Epitaph), HubEpitaph, LineX, LineY, LineW, 1.35f * S);
+}
+
+void ACRHubHUD::DrawRecruitment(const UCRProfileSubsystem& Profiles)
+{
+	const UCRProfileSaveGame* Profile = Profiles.GetActiveProfile();
+	const UCRRecruitmentDefinition* Recruitment = Profiles.GetRecruitment();
+	const int32 Living = Profiles.GetLivingHamsterCount();
+	const int32 Target = Recruitment ? Recruitment->TargetLivingRosterSize : 0;
+	const FBox2D Content = DrawOverlayFrame(TEXT("ПОПОЛНЕНИЕ"),
+		FString::Printf(TEXT("Живых хомяков: %d из %d · принять в убежище можно бесплатно"), Living, Target));
+	if (!Recruitment)
+	{
+		DrawTextAt(TEXT("Пополнение недоступно: нет данных (DA_Recruitment)"), HubBad, Content.Min.X, Content.Min.Y + 20.f * S, 1.2f * S);
+		return;
+	}
+
+	const bool bCanRecruit = Profiles.CanRecruit();
+	float Top = Content.Min.Y;
+	if (!bCanRecruit)
+	{
+		DrawTextAt(TEXT("В убежище достаточно хомяков."), HubGood, Content.Min.X, Top, 1.4f * S);
+		Top += 50.f * S;
+	}
+
+	// One card per saved candidate (they are saved, so reopening or restarting shows the same ones).
+	const TArray<FCRHamsterPersistentState>& Candidates = Profile->RecruitCandidates;
+	if (Candidates.Num() == 0)
+	{
+		DrawTextAt(TEXT("Сейчас никто не просится в убежище."), HubDim, Content.Min.X, Top, 1.1f * S);
+		return;
+	}
+	const float Gap = 24.f * S;
+	const float CardW = FMath::Min(420.f * S, (Content.GetSize().X - Gap * (Candidates.Num() - 1)) / Candidates.Num());
+	const float CardH = FMath::Min(Content.Max.Y - Top, 520.f * S);
+	float X = Content.GetCenter().X - (CardW * Candidates.Num() + Gap * (Candidates.Num() - 1)) * 0.5f;
+	for (const FCRHamsterPersistentState& Candidate : Candidates)
+	{
+		const FBox2D Card(FVector2D(X, Top), FVector2D(X + CardW, Top + CardH));
+		DrawBox(Card, FLinearColor(0.08f, 0.08f, 0.1f, 0.94f));
+		DrawFrame(Card, FLinearColor(0.4f, 0.36f, 0.3f), 2.f * S);
+
+		const float PortraitSize = FMath::Min(170.f * S, CardW - 40.f * S);
+		const FBox2D Portrait(FVector2D(Card.GetCenter().X - PortraitSize * 0.5f, Card.Min.Y + 24.f * S),
+			FVector2D(Card.GetCenter().X + PortraitSize * 0.5f, Card.Min.Y + 24.f * S + PortraitSize));
+		DrawPortrait(Candidate, Portrait);
+		float Y = Portrait.Max.Y + 18.f * S;
+		DrawTextCentered(Candidate.DisplayName, HubTitle, Card.GetCenter().X, Y, FitScale(Candidate.DisplayName, 1.7f * S, CardW - 24.f * S));
+		Y += 46.f * S;
+		DrawTextCentered(FString::Printf(TEXT("Здоровье %d"), Candidate.BaseMaxHP), HubText, Card.GetCenter().X, Y, 1.2f * S);
+		Y += 32.f * S;
+		DrawTextCentered(FString::Printf(TEXT("Мана %d"), Candidate.BaseManaPerTurn), HubMana, Card.GetCenter().X, Y, 1.2f * S);
+
+		// The epitaph already exists but stays secret: only the graveyard reveals it.
+		const FBox2D ButtonRect(FVector2D(Card.Min.X + 16.f * S, Card.Max.Y - 76.f * S), FVector2D(Card.Max.X - 16.f * S, Card.Max.Y - 16.f * S));
+		DrawButton(ButtonRect, TEXT("ПРИНЯТЬ В УБЕЖИЩЕ"), ActionRecruit, Candidate.HamsterId.ToString(), bCanRecruit,
+			ECRUIButtonStyle::Primary, bCanRecruit ? TEXT("бесплатно") : TEXT("мест нет"));
+		X += CardW + Gap;
+	}
 }
 
 UTexture2D* ACRHubHUD::GetAvatarTexture(const FCRHamsterPersistentState& Hamster)
@@ -508,7 +727,16 @@ UTexture2D* ACRHubHUD::GetAvatarTexture(const FCRHamsterPersistentState& Hamster
 
 bool ACRHubHUD::HandleScroll(const FVector2D& ScreenPos, float Delta)
 {
-	if (!RosterRect.bIsValid || !RosterRect.IsInside(ScreenPos))
+	if (View == EHubView::Graveyard)
+	{
+		if (!GraveListRect.bIsValid || !GraveListRect.IsInside(ScreenPos))
+		{
+			return false;
+		}
+		GraveScroll = FMath::Clamp(GraveScroll - (Delta > 0.f ? 1 : -1), 0, GraveMaxScroll);
+		return true;
+	}
+	if (View != EHubView::Sanctuary || !RosterRect.bIsValid || !RosterRect.IsInside(ScreenPos))
 	{
 		return false;
 	}
@@ -562,5 +790,27 @@ void ACRHubHUD::OnButton(const FCRUIButton& Button)
 	else if (Button.Action == ActionPlaceholder)
 	{
 		ShowMessage(FString::Printf(TEXT("Раздел «%s» появится позже"), *Button.Arg));
+	}
+	else if (Button.Action == ActionOpenGraveyard)
+	{
+		OpenView(EHubView::Graveyard, *Profiles);
+	}
+	else if (Button.Action == ActionOpenRecruitment)
+	{
+		OpenView(EHubView::Recruitment, *Profiles);
+	}
+	else if (Button.Action == ActionBack)
+	{
+		View = EHubView::Sanctuary;
+	}
+	else if (Button.Action == ActionSelectGrave)
+	{
+		SelectedGraveId = FName(*Button.Arg);
+	}
+	else if (Button.Action == ActionRecruit)
+	{
+		FString Feedback;
+		const bool bOk = Profiles->RecruitCandidate(FName(*Button.Arg), Feedback);
+		ShowMessage(Feedback, !bOk);
 	}
 }

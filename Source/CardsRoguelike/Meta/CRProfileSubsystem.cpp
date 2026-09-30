@@ -337,14 +337,14 @@ const FCRHamsterPersistentState* UCRProfileSubsystem::GetSelectedHamster() const
 
 bool UCRProfileSubsystem::SelectHamster(FName HamsterId)
 {
-	const FCRHamsterPersistentState* Hamster = ActiveProfile ? CRMeta::FindHamster(*ActiveProfile, HamsterId) : nullptr;
-	if (!Hamster || !Hamster->bAlive)
+	const FName Before = ActiveProfile ? ActiveProfile->SelectedHamsterId : NAME_None;
+	if (!ActiveProfile || !CRMeta::SelectHamster(*ActiveProfile, HamsterId))
 	{
-		return false;
+		return false; // unknown or dead: the dead are never selected
 	}
-	if (ActiveProfile->SelectedHamsterId != HamsterId)
+	if (Before != HamsterId)
 	{
-		ActiveProfile->SelectedHamsterId = HamsterId;
+		const FCRHamsterPersistentState* Hamster = CRMeta::FindHamster(*ActiveProfile, HamsterId);
 		SaveActiveProfile();
 		UE_LOG(LogCRProfile, Log, TEXT("Hamster selected for %s: %s (HP %d, mana %d)"), *ActiveProfile->ProfileId, *HamsterId.ToString(),
 			Hamster->BaseMaxHP, Hamster->BaseManaPerTurn);
