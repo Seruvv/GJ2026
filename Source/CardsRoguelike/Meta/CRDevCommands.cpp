@@ -6,6 +6,9 @@
 //   CR.Dev.Enter <Combat|Event|Shop> enters the first open room of that type and opens its map
 //   CR.Dev.LoseCombat                the combat hamster falls (normal defeat flow)
 //   CR.Dev.SetHP <n>                 sets the run hamster's current HP (e.g. before a lethal event choice)
+//   CR.Dev.Choose <n>                event room: takes choice n (as key n); CR.Dev.Continue = ПРОДОЛЖИТЬ
+//   CR.Dev.HubView <Graveyard|Recruitment|Sanctuary>   opens a sanctuary view (as its button)
+//   CR.Dev.Recruit <n>               recruits saved candidate n (1-based, as ПРИНЯТЬ В УБЕЖИЩЕ)
 //   CR.Dev.ReturnToHub               same as ВЕРНУТЬСЯ В УБЕЖИЩЕ on a finished run
 //   CR.Dev.KillAllLiving <name>      kills every living hamster of the active profile (name must match)
 
@@ -14,10 +17,13 @@
 #if !UE_BUILD_SHIPPING
 
 #include "../Combat/CRCombatGameMode.h"
+#include "../Event/CREventGameMode.h"
+#include "../Hub/CRHubHUD.h"
 #include "../Run/CRRunSubsystem.h"
 #include "CRProfileSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -158,6 +164,57 @@ namespace
 			}
 			Run->SetHamsterHP(FCString::Atoi(*Args[0]));
 			UE_LOG(LogCRDev, Log, TEXT("CR.Dev.SetHP: %d/%d"), Run->GetRunState().Hamster.CurrentHP, Run->GetRunState().Hamster.MaxHP);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GCRDevChoose(TEXT("CR.Dev.Choose"), TEXT("Event room: takes choice n (1-based), as pressing key n."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ACREventGameMode* Event = World ? World->GetAuthGameMode<ACREventGameMode>() : nullptr;
+			if (!Event || Args.Num() == 0 || !Args[0].IsNumeric())
+			{
+				UE_LOG(LogCRDev, Warning, TEXT("CR.Dev.Choose <n> (in an event room)"));
+				return;
+			}
+			Event->ChooseOption(FCString::Atoi(*Args[0]) - 1);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GCRDevContinue(TEXT("CR.Dev.Continue"), TEXT("Event room: ПРОДОЛЖИТЬ on the result screen."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (ACREventGameMode* Event = World ? World->GetAuthGameMode<ACREventGameMode>() : nullptr)
+			{
+				Event->Continue();
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GCRDevHubView(TEXT("CR.Dev.HubView"), TEXT("Sanctuary: opens Graveyard, Recruitment or Sanctuary."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			if (ACRHubHUD* HUD = PC ? Cast<ACRHubHUD>(PC->GetHUD()) : nullptr)
+			{
+				HUD->DevOpenView(Args.Num() > 0 ? Args[0] : FString());
+			}
+			else
+			{
+				UE_LOG(LogCRDev, Warning, TEXT("CR.Dev.HubView: not in the sanctuary"));
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GCRDevRecruit(TEXT("CR.Dev.Recruit"), TEXT("Recruits saved candidate n (1-based)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UCRProfileSubsystem* Profiles = DevProfiles(World);
+			const UCRProfileSaveGame* Profile = Profiles ? Profiles->GetActiveProfile() : nullptr;
+			const int32 Index = Args.Num() > 0 && Args[0].IsNumeric() ? FCString::Atoi(*Args[0]) - 1 : 0;
+			if (!Profile || !Profile->RecruitCandidates.IsValidIndex(Index))
+			{
+				UE_LOG(LogCRDev, Warning, TEXT("CR.Dev.Recruit <n>: no such candidate"));
+				return;
+			}
+			FString Message;
+			const bool bOk = Profiles->RecruitCandidate(Profile->RecruitCandidates[Index].HamsterId, Message);
+			UE_LOG(LogCRDev, Log, TEXT("CR.Dev.Recruit: %s (%s)"), bOk ? TEXT("ok") : TEXT("refused"), *Message);
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs GCRDevReturnToHub(TEXT("CR.Dev.ReturnToHub"), TEXT("Leaves a finished run for the sanctuary."),

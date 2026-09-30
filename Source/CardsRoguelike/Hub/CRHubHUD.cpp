@@ -517,6 +517,18 @@ void ACRHubHUD::OpenView(EHubView NewView, UCRProfileSubsystem& Profiles)
 	}
 }
 
+#if !UE_BUILD_SHIPPING
+void ACRHubHUD::DevOpenView(const FString& ViewName)
+{
+	ACRHubGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<ACRHubGameMode>() : nullptr;
+	if (UCRProfileSubsystem* Profiles = GM ? GM->GetProfiles() : nullptr)
+	{
+		OpenView(ViewName.Equals(TEXT("Graveyard"), ESearchCase::IgnoreCase) ? EHubView::Graveyard
+			: (ViewName.Equals(TEXT("Recruitment"), ESearchCase::IgnoreCase) ? EHubView::Recruitment : EHubView::Sanctuary), *Profiles);
+	}
+}
+#endif
+
 FBox2D ACRHubHUD::DrawOverlayFrame(const FString& Title, const FString& Subtitle)
 {
 	// Dim the whole sanctuary, then one large panel with the title and НАЗАД in its header.
@@ -633,8 +645,11 @@ void ACRHubHUD::DrawGraveDetails(const FCRHamsterPersistentState& Hamster, const
 	if (Death.bValid)
 	{
 		Facts.Add(FString::Printf(TEXT("Дата смерти: %s"), *Death.DeathTimestamp.ToString(TEXT("%d.%m.%Y %H:%M"))));
-		Facts.Add(FString::Printf(TEXT("Поход: сид %d · пройдено комнат: %d"), Death.RunSeed, Death.RoomsVisited));
-		Facts.Add(FString::Printf(TEXT("Место гибели: %s (%s)"), *CRRun::RoomTypeDisplayName(Death.RoomType), *Death.NodeId.ToString()));
+		if (!Death.NodeId.IsNone()) // records without run context (e.g. development kills) have no room
+		{
+			Facts.Add(FString::Printf(TEXT("Поход: сид %d · пройдено комнат: %d"), Death.RunSeed, Death.RoomsVisited));
+			Facts.Add(FString::Printf(TEXT("Место гибели: %s (%s)"), *CRRun::RoomTypeDisplayName(Death.RoomType), *Death.NodeId.ToString()));
+		}
 		Facts.Add(FString::Printf(TEXT("Потеряно: %s"), Death.LostLoot.IsZero() ? TEXT("ничего") : *CRMeta::FormatResources(Death.LostLoot)));
 	}
 	else

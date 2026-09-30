@@ -21,6 +21,12 @@ class CARDSROGUELIKE_API ACRHubHUD : public ACRMenuHUDBase
 {
 	GENERATED_BODY()
 
+public:
+#if !UE_BUILD_SHIPPING
+	/** Development (CR.Dev.HubView): opens "Graveyard", "Recruitment" or "Sanctuary" as its button would. */
+	void DevOpenView(const FString& ViewName);
+#endif
+
 protected:
 	virtual void DrawScreen() override;
 	virtual void OnButton(const FCRUIButton& Button) override;
