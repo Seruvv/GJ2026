@@ -92,6 +92,14 @@ public:
 	/** Broadcast after any change to the active profile (and when the active profile changes). */
 	FCROnProfileChanged OnProfileChanged;
 
+#if !UE_BUILD_SHIPPING
+	/**
+	 * Development (CR.Dev.KillAllLiving): kills every living hamster of the active profile, for empty-roster tests on
+	 * a disposable profile. ConfirmDisplayName must equal the active profile's name. Returns the number killed.
+	 */
+	int32 DevKillAllLiving(const FString& ConfirmDisplayName);
+#endif
+
 private:
 	void LoadIndex();
 	bool SaveIndex();

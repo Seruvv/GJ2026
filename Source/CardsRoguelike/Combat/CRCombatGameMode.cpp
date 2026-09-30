@@ -892,6 +892,19 @@ void ACRCombatGameMode::OnBarrelRemoved(ACRBarrel* Barrel)
 	}
 }
 
+#if !UE_BUILD_SHIPPING
+void ACRCombatGameMode::DevForceDefeat()
+{
+	if (!Hamster || CheckCombatEnd())
+	{
+		return;
+	}
+	Hamster->InitHealth(0, Hamster->GetMaxHP());
+	LogEvent(TEXT("DEV: forced defeat"));
+	CheckCombatEnd();
+}
+#endif
+
 bool ACRCombatGameMode::CheckCombatEnd()
 {
 	if (TurnState == ECRTurnState::Victory || TurnState == ECRTurnState::Defeat || TurnState == ECRTurnState::Reward)

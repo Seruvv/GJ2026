@@ -83,6 +83,11 @@ public:
 	/** True when this combat is a room of an active run (not the standalone sandbox test). */
 	bool IsRunIntegrated() const { return bRunIntegrated; }
 
+#if !UE_BUILD_SHIPPING
+	/** Development (CR.Dev.LoseCombat): the hamster falls now and the normal defeat check runs. */
+	void DevForceDefeat();
+#endif
+
 	/** Run-integrated only: pause on the VICTORY/DEFEAT banner before returning to the run map. */
 	UPROPERTY(EditAnywhere, Category = "CR|Run")
 	float RunReturnDelay = 2.f;

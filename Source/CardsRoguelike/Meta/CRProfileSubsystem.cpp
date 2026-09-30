@@ -428,6 +428,27 @@ bool UCRProfileSubsystem::RecruitCandidate(FName CandidateId, FString& OutMessag
 	return true;
 }
 
+#if !UE_BUILD_SHIPPING
+int32 UCRProfileSubsystem::DevKillAllLiving(const FString& ConfirmDisplayName)
+{
+	if (!ActiveProfile || ConfirmDisplayName.IsEmpty() || ActiveProfile->DisplayName != ConfirmDisplayName)
+	{
+		return 0;
+	}
+	FCRHamsterDeathRecord Record;
+	Record.DeathTimestamp = FDateTime::Now();
+	int32 Killed = 0;
+	for (const FCRHamsterPersistentState* Hamster : CRMeta::GetLivingHamsters(*ActiveProfile))
+	{
+		Killed += CRMeta::KillHamster(*ActiveProfile, Hamster->HamsterId, Record) ? 1 : 0;
+	}
+	SaveActiveProfile();
+	UE_LOG(LogCRProfile, Warning, TEXT("DEV: killed %d living hamsters of %s '%s'"), Killed, *ActiveProfile->ProfileId, *ActiveProfile->DisplayName);
+	OnProfileChanged.Broadcast();
+	return Killed;
+}
+#endif
+
 bool UCRProfileSubsystem::StartRunFromHub()
 {
 	UCRRunSubsystem* Run = GetGameInstance()->GetSubsystem<UCRRunSubsystem>();
