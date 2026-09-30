@@ -1000,4 +1000,223 @@ bool FCRMetaRecruitAssetTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// M2.8 RC: whole-run regressions through the real run subsystem (no maps, no input)
+// ---------------------------------------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRRunFullRouteReturnTest, "CardsRoguelike.Run.ProfileRun.FullRouteToReturn",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRRunFullRouteReturnTest::RunTest(const FString& Parameters)
+{
+	UCRHubCatalog* Catalog = MakeDeathTestCatalog();
+	Catalog->CompletedRunKeepPercent = 100;
+	UCRProfileSaveGame* Profile = MakeDeathTestProfile(Catalog);
+	Profile->Resources = MetaTestRes(13, 4, 0);
+
+	TArray<FCRRunState> Ends;
+	UCRRunSubsystem* Run = MakeTestRunSubsystem();
+	Run->OnRunEnded.AddLambda([&Ends](const FCRRunState& Ended) { Ends.Add(Ended); });
+	Run->StartProfileRun(CRMeta::BuildRunStartConfig(*Catalog, Profile->BuildingLevels, *CRMeta::FindHamster(*Profile, TEXT("Tank")), Profile->ProfileId));
+
+	// Walk the route: enter the first open room each step. Gameplay rooms are resolved the way their maps do it
+	// (a won combat grants its placeholder resources); Boss and Return resolve on arrival.
+	bool bVisitedBoss = false;
+	for (int32 Step = 0; Step < 32 && Run->IsRunActive(); ++Step)
+	{
+		const FCRRunNodeData* Next = Run->GetRunState().Nodes.FindByPredicate([](const FCRRunNodeData& N) { return N.State == ECRRunNodeState::Available; });
+		if (!TestNotNull(TEXT("an open room while the run is active"), Next) || !TestTrue(TEXT("room entered"), Run->EnterNode(Next->NodeId)))
+		{
+			return false;
+		}
+		const ECRRoomType Type = Run->GetCurrentNode()->RoomType;
+		bVisitedBoss |= Type == ECRRoomType::Boss;
+		if (Type == ECRRoomType::Combat)
+		{
+			Run->AddCarriedResources(5, 1, 1);
+		}
+		if (Type == ECRRoomType::Combat || Type == ECRRoomType::Shop || Type == ECRRoomType::Event)
+		{
+			TestTrue(TEXT("room resolved"), Run->CompleteCurrentRoom());
+		}
+	}
+	TestTrue(TEXT("the boss placeholder was on the way"), bVisitedBoss);
+	TestEqual(TEXT("the run completed"), Run->GetStatus(), ECRRunStatus::Completed);
+	TestEqual(TEXT("it ends on the Return"), Run->GetCurrentNode() ? Run->GetCurrentNode()->RoomType : ECRRoomType::Start, ECRRoomType::Return);
+	TestEqual(TEXT("reported once"), Ends.Num(), 1);
+	if (Ends.Num() != 1)
+	{
+		return false;
+	}
+	TestEqual(TEXT("reported as completed"), Ends[0].EndReason, ECRRunEndReason::Completed);
+	const FCRCarriedLoot Carried = Ends[0].Carried;
+	TestTrue(TEXT("something was carried"), Carried.Silver > 0 && Carried.Food > 0 && Carried.Wood > 0);
+
+	TestTrue(TEXT("applied"), CRMeta::ApplyRunEnd(*Profile, Catalog, Ends[0], FDateTime(2026, 10, 1, 3, 0, 0)));
+	const FCRHamsterPersistentState* Tank = CRMeta::FindHamster(*Profile, TEXT("Tank"));
+	TestTrue(TEXT("the hamster survives, unhurt, without a death record"), Tank && Tank->bAlive && !Tank->Death.bValid && Tank->BaseMaxHP == 36);
+	TestTrue(TEXT("100% delivered"), Profile->Resources.Silver == 13 + Carried.Silver && Profile->Resources.Food == 4 + Carried.Food
+		&& Profile->Resources.Wood == Carried.Wood);
+	TestTrue(TEXT("LastRun: completed, with the hamster and full delivery"), Profile->LastRun.bValid && Profile->LastRun.Reason == ECRRunEndReason::Completed
+		&& Profile->LastRun.HamsterId == FName(TEXT("Tank")) && Profile->LastRun.Delivered.Silver == Carried.Silver);
+	TestEqual(TEXT("completed stat"), Profile->Stats.RunsCompleted, 1);
+	TestEqual(TEXT("per-hamster completed counter"), Tank ? Tank->Stats.FindRef(CRMeta::HamsterStatRunsCompleted()) : 0, 1);
+	TestEqual(TEXT("graveyard unchanged"), CRMeta::GetGraveyard(*Profile).Num(), 0);
+	TestEqual(TEXT("three living"), CRMeta::CountLivingHamsters(*Profile), 3);
+	TestEqual(TEXT("selection unchanged"), Profile->SelectedHamsterId, FName(TEXT("Tank")));
+
+	// Returning to the hub clears the finished run without reporting it again.
+	Run->AbandonRun();
+	TestEqual(TEXT("still one report after leaving"), Ends.Num(), 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRRunShopTest, "CardsRoguelike.Run.ProfileRun.ShopPurchaseAndHeal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRRunShopTest::RunTest(const FString& Parameters)
+{
+	UCRHubCatalog* Catalog = MakeDeathTestCatalog();
+	UCRProfileSaveGame* Profile = MakeDeathTestProfile(Catalog);
+	TArray<FCRRunState> Ends;
+	UCRRunSubsystem* Run = StartTestProfileRun(*Catalog, *Profile, TEXT("Average"), ECRRoomType::Shop, Ends);
+	const FName ShopNode = Run->GetRunState().CurrentNodeId;
+	if (!TestTrue(TEXT("hamster stands in a shop"), Run->IsInShopRoom()))
+	{
+		return false;
+	}
+	Run->AddCarriedResources(20, 0, 0);
+
+	const FCRShopState* Shop = Run->EnsureShopState(ShopNode, 3);
+	if (!TestNotNull(TEXT("shop created"), Shop))
+	{
+		return false;
+	}
+	TestEqual(TEXT("three offers"), Shop->OfferCardIds.Num(), 3);
+	TestEqual(TEXT("three distinct offers"), TSet<FName>(Shop->OfferCardIds).Num(), 3);
+	TestFalse(TEXT("merchant line"), Shop->MerchantLine.IsEmpty());
+	const TArray<FName> Offers = Shop->OfferCardIds;
+	const int32 DeckBefore = Run->GetRunState().DeckCardIds.Num();
+
+	TestTrue(TEXT("buy offer 0"), Run->BuyShopCard(ShopNode, 0, 8));
+	TestFalse(TEXT("the same offer cannot be bought twice"), Run->BuyShopCard(ShopNode, 0, 8));
+	TestEqual(TEXT("silver deducted once"), Run->GetRunState().Carried.Silver, 12);
+	TestEqual(TEXT("one card added"), Run->GetRunState().DeckCardIds.Num(), DeckBefore + 1);
+	TestEqual(TEXT("the bought card"), Run->GetRunState().DeckCardIds.Last(), Offers[0]);
+	TestFalse(TEXT("unaffordable offer refused"), Run->BuyShopCard(ShopNode, 1, 13));
+	TestEqual(TEXT("silver unchanged by the refusal"), Run->GetRunState().Carried.Silver, 12);
+
+	// Re-entering the shop's map reuses the saved state: same offers, the purchase stays sold.
+	const FCRShopState* Again = Run->EnsureShopState(ShopNode, 3);
+	TestTrue(TEXT("offers never reroll"), Again && Again->OfferCardIds == Offers);
+	TestTrue(TEXT("sold state persists"), Again && Again->OfferPurchased.IsValidIndex(0) && Again->OfferPurchased[0] && !Again->OfferPurchased[1]);
+
+	TestFalse(TEXT("no heal at full HP"), Run->BuyShopHeal(ShopNode, 5, 10));
+	Run->SetHamsterHP(10);
+	TestTrue(TEXT("heal bought"), Run->BuyShopHeal(ShopNode, 5, 10));
+	TestEqual(TEXT("healed"), Run->GetRunState().Hamster.CurrentHP, 20);
+	TestEqual(TEXT("heal paid once"), Run->GetRunState().Carried.Silver, 7);
+	TestFalse(TEXT("one heal per shop"), Run->BuyShopHeal(ShopNode, 5, 10));
+
+	// Leaving resolves the room; the shop keeps its state but sells nothing more.
+	TestTrue(TEXT("leave the shop"), Run->CompleteCurrentRoom());
+	TestTrue(TEXT("run still active"), Run->IsRunActive());
+	TestFalse(TEXT("no purchases after leaving"), Run->BuyShopCard(ShopNode, 2, 0));
+	TestTrue(TEXT("shop state kept for the run"), Run->FindShopState(ShopNode) && Run->FindShopState(ShopNode)->OfferPurchased[0]);
+	TestEqual(TEXT("no run end"), Ends.Num(), 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRRunNonLethalEventTest, "CardsRoguelike.Run.ProfileRun.NonLethalEvent",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRRunNonLethalEventTest::RunTest(const FString& Parameters)
+{
+	UCRHubCatalog* Catalog = MakeDeathTestCatalog();
+	UCRProfileSaveGame* Profile = MakeDeathTestProfile(Catalog);
+	TArray<FCRRunState> Ends;
+	UCRRunSubsystem* Run = StartTestProfileRun(*Catalog, *Profile, TEXT("Average"), ECRRoomType::Event, Ends);
+	const FName EventNode = Run->GetRunState().CurrentNodeId;
+	if (!TestTrue(TEXT("hamster stands in an event room"), Run->IsInEventRoom()))
+	{
+		return false;
+	}
+
+	// HP -2, Silver +3, a specific card.
+	UCREventDefinition* Event = NewObject<UCREventDefinition>(GetTransientPackage());
+	Event->EventId = TEXT("NonLethalTest");
+	FCREventChoice& Choice = Event->Choices.AddDefaulted_GetRef();
+	FCREventEffect& Hurt = Choice.Effects.AddDefaulted_GetRef();
+	Hurt.Type = ECREventEffectType::ModifyHP;
+	Hurt.Amount = -2;
+	FCREventEffect& Coins = Choice.Effects.AddDefaulted_GetRef();
+	Coins.Type = ECREventEffectType::ModifyResource;
+	Coins.Resource = ECREventResource::Silver;
+	Coins.Amount = 3;
+	FCREventEffect& Card = Choice.Effects.AddDefaulted_GetRef();
+	Card.Type = ECREventEffectType::AddSpecificCard;
+	Card.CardId = TEXT("Guard");
+	FCREventNodeState& State = Run->GetMutableRunStateForTests().EventStates.FindOrAdd(EventNode);
+	State.bInitialized = true;
+	State.SelectedEvent = Event;
+
+	const int32 HPBefore = Run->GetRunState().Hamster.CurrentHP;
+	const int32 DeckBefore = Run->GetRunState().DeckCardIds.Num();
+	TestTrue(TEXT("commit"), Run->CommitEventChoice(EventNode, Event, 0, INDEX_NONE));
+	TestFalse(TEXT("commits only once"), Run->CommitEventChoice(EventNode, Event, 0, INDEX_NONE));
+	TestEqual(TEXT("HP -2 once"), Run->GetRunState().Hamster.CurrentHP, HPBefore - 2);
+	TestEqual(TEXT("Silver +3 once"), Run->GetRunState().Carried.Silver, 3);
+	TestEqual(TEXT("one card added"), Run->GetRunState().DeckCardIds.Num(), DeckBefore + 1);
+	TestTrue(TEXT("result recorded"), Run->FindEventState(EventNode) && Run->FindEventState(EventNode)->ResultLines.Num() == 3);
+	TestTrue(TEXT("no death: the run stays active"), Run->IsRunActive() && !Run->IsRunFailed());
+
+	TestTrue(TEXT("continue completes the room"), Run->ContinueFromEvent(EventNode));
+	TestFalse(TEXT("continue only once"), Run->ContinueFromEvent(EventNode));
+	TestTrue(TEXT("next rooms open"), Run->GetRunState().Nodes.ContainsByPredicate([](const FCRRunNodeData& N) { return N.State == ECRRunNodeState::Available; }));
+	TestEqual(TEXT("no run end"), Ends.Num(), 0);
+	TestTrue(TEXT("the profile hamster lives"), CRMeta::FindHamster(*Profile, TEXT("Average"))->bAlive);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCRMetaProfileIsolationTest, "CardsRoguelike.Meta.ProfileSlotIsolation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FCRMetaProfileIsolationTest::RunTest(const FString& Parameters)
+{
+	UCRHubCatalog* Catalog = MakeDeathTestCatalog();
+	UCRProfileSaveGame* A = MakeDeathTestProfile(Catalog);
+	A->ProfileId = TEXT("AUTOMATION_ISOLATION_A");
+	UCRProfileSaveGame* B = MakeDeathTestProfile(Catalog);
+	B->ProfileId = TEXT("AUTOMATION_ISOLATION_B");
+	B->Resources = MetaTestRes(60, 4, 6);
+	const TArray<FCRHamsterPersistentState> BCandidates = B->RecruitCandidates;
+	const FString SlotA = CRMeta::ProfileSlot(A->ProfileId);
+	const FString SlotB = CRMeta::ProfileSlot(B->ProfileId);
+	TestTrue(TEXT("B saved"), UGameplayStatics::SaveGameToSlot(B, SlotB, CRMeta::SaveUserIndex));
+
+	// Progress, a death and a recruit in A only.
+	A->Resources = MetaTestRes(13, 4, 0);
+	A->BuildingLevels.Add(TEXT("Heart"), 2);
+	CRMeta::ApplyRunEnd(*A, Catalog, MakeEndedRun(ECRRunEndReason::Failed, TEXT("Tank"), TEXT("RUN_ISO"), 0, 0, 0), FDateTime(2026, 10, 1, 3, 0, 0));
+	CRMeta::RecruitCandidate(*A, Catalog->Recruitment, A->RecruitCandidates[0].HamsterId);
+	TestTrue(TEXT("A saved"), UGameplayStatics::SaveGameToSlot(A, SlotA, CRMeta::SaveUserIndex));
+
+	const UCRProfileSaveGame* LoadedB = Cast<UCRProfileSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotB, CRMeta::SaveUserIndex));
+	if (TestNotNull(TEXT("B reloads"), LoadedB))
+	{
+		TestTrue(TEXT("B keeps its resources"), LoadedB->Resources.Silver == 60 && LoadedB->Resources.Food == 4 && LoadedB->Resources.Wood == 6);
+		TestFalse(TEXT("B has no building progress from A"), LoadedB->BuildingLevels.Contains(TEXT("Heart")));
+		TestEqual(TEXT("B: all three alive"), CRMeta::CountLivingHamsters(*LoadedB), 3);
+		TestEqual(TEXT("B: empty graveyard"), CRMeta::GetGraveyard(*LoadedB).Num(), 0);
+		TestEqual(TEXT("B: no stats from A"), LoadedB->Stats.RunsFailed, 0);
+		TestFalse(TEXT("B: no last run from A"), LoadedB->LastRun.bValid);
+		TestEqual(TEXT("B: roster size unchanged"), LoadedB->Hamsters.Num(), 3);
+		bool bSameCandidates = LoadedB->RecruitCandidates.Num() == BCandidates.Num();
+		for (int32 i = 0; bSameCandidates && i < BCandidates.Num(); ++i)
+		{
+			bSameCandidates = LoadedB->RecruitCandidates[i].HamsterId == BCandidates[i].HamsterId;
+		}
+		TestTrue(TEXT("B keeps its own candidates"), bSameCandidates);
+	}
+	UGameplayStatics::DeleteGameInSlot(SlotA, CRMeta::SaveUserIndex);
+	UGameplayStatics::DeleteGameInSlot(SlotB, CRMeta::SaveUserIndex);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
