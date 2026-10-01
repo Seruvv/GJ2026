@@ -49,8 +49,15 @@ void ACRDebugHUD::DrawHUD()
 	RewardCardRects.Reset();
 	RewardSkipRect = FBox2D(ForceInit);
 
-	DrawArenaLabels(GM);
-	DrawEnemyOverlays(GM);
+	// World labels (edge names, pit, enemy intents) only while the fight is on; never over the Victory,
+	// Defeat or Reward overlays.
+	const ECRTurnState TurnState = GM->GetTurnState();
+	const bool bFightActive = TurnState == ECRTurnState::PlayerTurn || TurnState == ECRTurnState::ResolvingCard || TurnState == ECRTurnState::EnemyTurn;
+	if (bFightActive)
+	{
+		DrawArenaLabels(GM);
+		DrawEnemyOverlays(GM);
+	}
 
 	bool bValidDrop = false;
 	if (!bCursorOverHand && !bReward)
@@ -310,9 +317,15 @@ void ACRDebugHUD::DrawHamsterPanel(const ACRCombatGameMode* GM)
 	const float X = Canvas->ClipX - W - 28.f * S;
 	float Y = 24.f * S;
 
-	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + W, Y + 128.f * S)), PanelColor);
+	const FString Name = GM->GetHamsterDisplayName();
+	DrawBox(FBox2D(FVector2D(X - 12.f * S, Y - 10.f * S), FVector2D(X + W, Y + (Name.IsEmpty() ? 128.f : 158.f) * S)), PanelColor);
 	DrawTextAt(TEXT("ХОМЯК"), FLinearColor(1.f, 0.75f, 0.35f), X, Y, 1.4f * S);
 	Y += 34.f * S;
+	if (!Name.IsEmpty())
+	{
+		DrawTextAt(Name, TextColor, X, Y, 1.3f * S);
+		Y += 30.f * S;
+	}
 
 	const float Ratio = Hamster->GetMaxHP() > 0 ? FMath::Clamp(float(Hamster->GetHP()) / Hamster->GetMaxHP(), 0.f, 1.f) : 0.f;
 	const FLinearColor BarColor = Ratio > 0.5f ? FLinearColor(0.3f, 0.85f, 0.35f) : (Ratio > 0.25f ? FLinearColor(0.95f, 0.75f, 0.2f) : FLinearColor(0.95f, 0.2f, 0.15f));
@@ -395,7 +408,11 @@ void ACRDebugHUD::DrawCard(const FCRCardDef& Card, int32 Index, const FBox2D& Re
 	const float TextMaxW = Size.X - 14.f * S * TextScale;
 	DrawTextFitted(Card.Name, Fade(bAffordable ? TextColor : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.32f, 1.6f * S * TextScale, TextMaxW);
 	DrawTextFitted(Card.ShortText, Fade(bAffordable ? FLinearColor(0.75f, 0.8f, 0.9f) : DimTextColor), CenterX, Rect.Min.Y + Size.Y * 0.52f, 1.05f * S * TextScale, TextMaxW, 0.9f);
-	DrawTextCentered(FString::Printf(TEXT("[%d]"), Index + 1), Fade(DimTextColor), CenterX, Rect.Max.Y - 30.f * S * TextScale, 1.0f * S * TextScale);
+	// Keyboard shortcut label only for slots that have one (1-9); later cards are mouse-only.
+	if (Index < 9)
+	{
+		DrawTextCentered(FString::Printf(TEXT("[%d]"), Index + 1), Fade(DimTextColor), CenterX, Rect.Max.Y - 30.f * S * TextScale, 1.0f * S * TextScale);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -545,8 +562,8 @@ void ACRDebugHUD::DrawDebugExtras(const ACRCombatGameMode* GM)
 	DrawTextAt(TEXT("DEBUG VIEW  (F10)"), FLinearColor(1.f, 0.4f, 1.f), X, Y, 1.2f * S);
 	Y += 28.f * S;
 	DrawTextAt(GM->IsRunIntegrated()
-		? TEXT("1-5 select card | LMB target | RMB cancel | Space end turn | 7/8/9 cycle edge | R restart disabled during run")
-		: TEXT("1-5 select card | LMB target | RMB cancel | Space end turn | 7/8/9 cycle edge | R restart"), DimTextColor, X, Y, 0.95f * S);
+		? TEXT("1-9 select card | LMB target | RMB cancel | Space end turn | Shift+7/8/9 cycle edge (debug) | R restart disabled during run")
+		: TEXT("1-9 select card | LMB target | RMB cancel | Space end turn | Shift+7/8/9 cycle edge (debug) | R restart"), DimTextColor, X, Y, 0.95f * S);
 	Y += 30.f * S;
 
 	if (GM->GetTurnState() == ECRTurnState::Reward)

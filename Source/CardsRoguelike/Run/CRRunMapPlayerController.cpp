@@ -1,13 +1,16 @@
-#include "CRRunMapPlayerController.h"
+﻿#include "CRRunMapPlayerController.h"
 
 #include "Components/InputComponent.h"
+#include "../Meta/CRMetaTypes.h"
 #include "CRRunMapActor.h"
+#include "CRRunMapHUD.h"
 #include "CRRunMapGameMode.h"
 #include "CRRunNodeActor.h"
 #include "CRRunSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
+#include "Kismet/GameplayStatics.h"
 
 ACRRunMapPlayerController::ACRRunMapPlayerController()
 {
@@ -77,6 +80,33 @@ void ACRRunMapPlayerController::OnLeftClick()
 {
 	const ACRRunMapActor* Map = GetMapActor();
 	UCRRunSubsystem* Run = GetRunSubsystem();
+
+	// HUD buttons (profile runs only) take the click before the map does.
+	float MouseX = 0.f;
+	float MouseY = 0.f;
+	ACRRunMapHUD* HUD = Cast<ACRRunMapHUD>(GetHUD());
+	if (HUD && Run && GetMousePosition(MouseX, MouseY))
+	{
+		switch (HUD->HitTest(FVector2D(MouseX, MouseY)))
+		{
+		case ECRRunMapButton::ReturnToHub:
+			// The finished run was already delivered to the profile; clearing it reports nothing more.
+			Run->AbandonRun();
+			UGameplayStatics::OpenLevel(this, FName(CRMeta::HubMapPath()));
+			return;
+		case ECRRunMapButton::LeaveRun:
+			if (HUD->ConfirmLeave())
+			{
+				// Leaving mid-run is reported as Abandoned (the profile keeps AbandonedRunKeepPercent of the loot).
+				Run->AbandonRun();
+				UGameplayStatics::OpenLevel(this, FName(CRMeta::HubMapPath()));
+			}
+			return;
+		default:
+			break;
+		}
+	}
+
 	const ACRRunNodeActor* Node = GetNodeUnderCursor();
 	if (!Map || !Run || !Node || Map->IsMarkerMoving())
 	{
@@ -89,8 +119,8 @@ void ACRRunMapPlayerController::OnLeftClick()
 
 void ACRRunMapPlayerController::OnRestartRun()
 {
-	// Debug convenience: throw away the test run and start it again.
-	if (UCRRunSubsystem* Run = GetRunSubsystem())
+	// Debug convenience for developer runs only: a run from the hub cannot be rerolled for free.
+	if (UCRRunSubsystem* Run = GetRunSubsystem(); Run && !Run->IsProfileRun())
 	{
 		Run->AbandonRun();
 		Run->StartFreshRun();

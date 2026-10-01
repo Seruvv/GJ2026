@@ -86,6 +86,7 @@ void ACRCombatGameMode::ApplyRunState()
 
 	const FCRRunState& State = Run->GetRunState();
 	ManaPerTurn = State.Hamster.ManaPerTurn;
+	HamsterDisplayName = State.Hamster.Name;
 	if (Hamster)
 	{
 		Hamster->InitHealth(State.Hamster.CurrentHP, State.Hamster.MaxHP);
@@ -131,7 +132,7 @@ void ACRCombatGameMode::OnCombatResolved(bool bVictory)
 	}
 
 	Run->SetHamsterHP(0);
-	Run->FailCurrentRun();
+	Run->FailCurrentRun(ECRHamsterDeathCause::Combat);
 	GetWorldTimerManager().SetTimer(ReturnToRunTimer, this, &ACRCombatGameMode::ReturnToRunMap, FMath::Max(RunReturnDelay, 0.01f), false);
 }
 
@@ -341,6 +342,17 @@ void ACRCombatGameMode::Tick(float DeltaSeconds)
 	switch (TurnState)
 	{
 	case ECRTurnState::PlayerTurn:
+		// An enemy can be eliminated while no card is resolving (a late fall into the void or pit, a barrel
+		// chain after the resolve watchdog). The elimination only flags the check; it runs here, outside the
+		// physics/overlap callback, so Victory (or Defeat) starts at once and exactly once.
+		if (TurnNumber > 0 && (bEndCheckPending || (Hamster && Hamster->IsDead())))
+		{
+			bEndCheckPending = false;
+			if (CheckCombatEnd())
+			{
+				break;
+			}
+		}
 		RefreshIntents();
 		break;
 
@@ -475,7 +487,8 @@ void ACRCombatGameMode::RequestEndTurn()
 
 void ACRCombatGameMode::CycleBoundaryType(int32 EdgeIndex)
 {
-	if (Arena && EdgeIndex < Arena->GetNumEdges() && TurnState == ECRTurnState::PlayerTurn)
+	// Developer tool: only in Debug View (the controller also requires Shift+7/8/9).
+	if (bDebugView && Arena && EdgeIndex >= 0 && EdgeIndex < Arena->GetNumEdges() && TurnState == ECRTurnState::PlayerTurn)
 	{
 		Arena->CycleEdgeType(EdgeIndex);
 		LogEvent(FString::Printf(TEXT("Edge %d is now %s"), EdgeIndex + 1, *CRProto::BoundaryTypeName(Arena->GetEdgeType(EdgeIndex))));
@@ -861,6 +874,8 @@ void ACRCombatGameMode::RefreshIntents()
 void ACRCombatGameMode::OnEnemyEliminated(ACREnemy* Enemy, ECREliminationReason Reason)
 {
 	Enemies.Remove(Enemy);
+	// Card resolution and enemy actions check the end themselves; this covers eliminations between them.
+	bEndCheckPending = true;
 	if (PendingTarget.Get() == Enemy)
 	{
 		PendingTarget.Reset();
@@ -876,6 +891,19 @@ void ACRCombatGameMode::OnBarrelRemoved(ACRBarrel* Barrel)
 		PendingTarget.Reset();
 	}
 }
+
+#if !UE_BUILD_SHIPPING
+void ACRCombatGameMode::DevForceDefeat()
+{
+	if (!Hamster || CheckCombatEnd())
+	{
+		return;
+	}
+	Hamster->InitHealth(0, Hamster->GetMaxHP());
+	LogEvent(TEXT("DEV: forced defeat"));
+	CheckCombatEnd();
+}
+#endif
 
 bool ACRCombatGameMode::CheckCombatEnd()
 {

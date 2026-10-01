@@ -1,4 +1,4 @@
-// Prototype combat input: drag cards from the hand into the arena, number keys as fallback.
+﻿// Prototype combat input: drag cards from the hand into the arena, number keys as fallback.
 
 #pragma once
 
@@ -33,15 +33,13 @@ private:
 	bool IsCursorOverHand() const;
 
 	void SelectCard(int32 Index);
-	void SelectCard1() { SelectCard(0); }
-	void SelectCard2() { SelectCard(1); }
-	void SelectCard3() { SelectCard(2); }
-	void SelectCard4() { SelectCard(3); }
-	void SelectCard5() { SelectCard(4); }
 
-	void CycleEdge1();
-	void CycleEdge2();
-	void CycleEdge3();
+	/**
+	 * Number keys 1-9: select hand card Digit-1 (missing cards are ignored). In Debug View only, Shift+7/8/9
+	 * cycles arena edges 1-3 instead; that developer tool is never reachable in normal play.
+	 */
+	void OnNumberKey(int32 Digit);
+	bool IsShiftDown() const;
 
 	void OnLeftPressed();
 	void OnLeftReleased();

@@ -54,6 +54,10 @@ public:
 	int32 GetFood() const;
 	int32 GetWood() const;
 	bool IsContinuing() const { return bContinuing; }
+	/** True once the committed choice killed the hamster (the run failed). */
+	bool IsHamsterDead() const;
+	/** Hamster name of the current run. */
+	FString GetHamsterName() const;
 	FString GetActiveMessage() const;
 
 private:

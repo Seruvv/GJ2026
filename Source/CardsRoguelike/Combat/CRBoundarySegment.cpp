@@ -94,7 +94,7 @@ void ACRBoundarySegment::RefreshLabel()
 	// so this label only shows in Debug View, with the cycling key.
 	Label->SetVisibility(bLabelShowsDebug);
 	const FString TypeName = CRProto::BoundaryTypeName(BoundaryType);
-	Label->SetText(FText::FromString(bLabelShowsDebug ? FString::Printf(TEXT("[%d] %s"), EdgeIndex + 7, *TypeName) : TypeName));
+	Label->SetText(FText::FromString(bLabelShowsDebug ? FString::Printf(TEXT("[Shift+%d] %s"), EdgeIndex + 7, *TypeName) : TypeName));
 	// Lightened so dark types (VOID) stay legible against the dark floor.
 	const FLinearColor LabelColor = FMath::Lerp(CRProto::BoundaryTypeColor(BoundaryType), FLinearColor::White, 0.35f);
 	Label->SetTextRenderColor(LabelColor.ToFColor(true));

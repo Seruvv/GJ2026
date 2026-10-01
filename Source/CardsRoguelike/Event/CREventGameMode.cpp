@@ -187,7 +187,20 @@ void ACREventGameMode::Continue()
 	}
 
 	UCRRunSubsystem* Run = GetRun();
-	if (!Run || !Run->ContinueFromEvent(EventNodeId))
+	if (!Run)
+	{
+		return;
+	}
+	if (Run->IsRunFailed())
+	{
+		// The choice killed the hamster: the run is over, the room is never completed. Show the run map's
+		// failure state (which leads back to the sanctuary).
+		bContinuing = true;
+		UE_LOG(LogCREvent, Log, TEXT("Event %s was lethal; returning to the failed run map"), *EventNodeId.ToString());
+		UGameplayStatics::OpenLevel(this, FName(CRRun::RunMapPath()));
+		return;
+	}
+	if (!Run->ContinueFromEvent(EventNodeId))
 	{
 		return;
 	}
@@ -201,6 +214,18 @@ const TArray<FName>& ACREventGameMode::GetDeck() const
 	static const TArray<FName> Empty;
 	const UCRRunSubsystem* Run = GetRun();
 	return Run ? Run->GetRunState().DeckCardIds : Empty;
+}
+
+bool ACREventGameMode::IsHamsterDead() const
+{
+	const UCRRunSubsystem* Run = GetRun();
+	return bValidEvent && Run && Run->IsRunFailed();
+}
+
+FString ACREventGameMode::GetHamsterName() const
+{
+	const UCRRunSubsystem* Run = GetRun();
+	return Run ? Run->GetRunState().Hamster.Name : FString();
 }
 
 int32 ACREventGameMode::GetHP() const

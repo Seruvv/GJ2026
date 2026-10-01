@@ -1,4 +1,4 @@
-// Prototype combat GameMode: scene setup, turn state machine, mana and card resolution.
+﻿// Prototype combat GameMode: scene setup, turn state machine, mana and card resolution.
 
 #pragma once
 
@@ -67,6 +67,8 @@ public:
 	ACRArena* GetArena() const { return Arena; }
 	ACRHamster* GetHamster() const { return Hamster; }
 	ECRTurnState GetTurnState() const { return TurnState; }
+	/** Name of the run's hamster (empty in a standalone combat test). */
+	const FString& GetHamsterDisplayName() const { return HamsterDisplayName; }
 	FString GetTurnStateName() const;
 	int32 GetMana() const { return Mana; }
 	int32 GetTurnNumber() const { return TurnNumber; }
@@ -80,6 +82,11 @@ public:
 
 	/** True when this combat is a room of an active run (not the standalone sandbox test). */
 	bool IsRunIntegrated() const { return bRunIntegrated; }
+
+#if !UE_BUILD_SHIPPING
+	/** Development (CR.Dev.LoseCombat): the hamster falls now and the normal defeat check runs. */
+	void DevForceDefeat();
+#endif
 
 	/** Run-integrated only: pause on the VICTORY/DEFEAT banner before returning to the run map. */
 	UPROPERTY(EditAnywhere, Category = "CR|Run")
@@ -118,6 +125,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "CR|Turn")
 	int32 ManaPerTurn = 3;
+
+	/** Run hamster name for the HUD (set when the combat is part of a run). */
+	FString HamsterDisplayName;
 
 	/** Card Blast damages the hamster when true (barrel explosions always can). */
 	UPROPERTY(EditAnywhere, Category = "CR|Cards")
@@ -232,6 +242,8 @@ private:
 	TArray<FName> RewardOffers;
 	FName ChosenReward;
 	bool bResourcesGranted = false;
+	/** Set by an elimination; the next PlayerTurn tick runs CheckCombatEnd (see Tick). */
+	bool bEndCheckPending = false;
 	bool bRewardCommitted = false;
 	FString FlashMessage;
 	double FlashMessageTime = -100.0;

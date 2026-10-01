@@ -404,7 +404,9 @@ void ACREventHUD::DrawResultScreen(const ACREventGameMode* GM, const FBox2D& Con
 	DrawBox(FBox2D(FVector2D(Content.Min.X, Y), FVector2D(Content.Max.X, Y + 2.f * S)), FLinearColor(0.35f, 0.3f, 0.2f));
 	Y += 18.f * S;
 
-	// CONTINUE (bottom-right): the player decides when the result has been read.
+	// CONTINUE (bottom-right): the player decides when the result has been read. After a lethal choice it
+	// leads to the failed run instead of the next room.
+	const bool bDead = GM->IsHamsterDead();
 	const FBox2D ContinueRect(FVector2D(Content.Max.X - 280.f * S, Content.Max.Y - 76.f * S), Content.Max);
 	const bool bActive = !GM->IsContinuing();
 	const bool bHot = bActive && ContinueRect.IsInside(Mouse);
@@ -412,7 +414,8 @@ void ACREventHUD::DrawResultScreen(const ACREventGameMode* GM, const FBox2D& Con
 	DrawBox(ContinueRect, bActive ? (bHot ? FLinearColor(0.5f, 0.36f, 0.14f, 0.97f) : FLinearColor(0.38f, 0.26f, 0.1f, 0.95f)) : EventHudDisabledColor);
 	DrawFrame(ContinueRect, bHot ? FLinearColor::White : FLinearColor(0.9f, 0.7f, 0.4f), 3.f * S);
 	DrawTextCentered(TEXT("ПРОДОЛЖИТЬ"), EventHudTextColor, ContinueRect.GetCenter().X, ContinueRect.Min.Y + 10.f * S, 1.6f * S);
-	DrawTextCentered(TEXT("Вернуться на карту  (Пробел)"), EventHudDimTextColor, ContinueRect.GetCenter().X, ContinueRect.Min.Y + 46.f * S, 0.9f * S);
+	DrawTextCentered(bDead ? TEXT("Поход окончен  (Пробел)") : TEXT("Вернуться на карту  (Пробел)"), EventHudDimTextColor,
+		ContinueRect.GetCenter().X, ContinueRect.Min.Y + 46.f * S, 0.9f * S);
 
 	// Result narrative, the actual consequences, then the event's closing line: one scrollable column.
 	TArray<FTextLine> Lines;
@@ -430,7 +433,15 @@ void ACREventHUD::DrawResultScreen(const ACREventGameMode* GM, const FBox2D& Con
 			AppendWrapped(Lines, ResultLine, ResultLineColor(ResultLine), EventHudChoiceScale * S, Width);
 		}
 	}
-	const FString Continuation = Event->ContinuationText.ToString();
+	if (bDead)
+	{
+		// The death replaces the usual "moves on" closing line.
+		Lines.Add({ FString(), EventHudTextColor, EventHudBodyScale * S });
+		AppendWrapped(Lines, TEXT("ХОМЯК ПОГИБ"), EventHudBadColor, EventHudTitleScale * S, Width);
+		AppendWrapped(Lines, FString::Printf(TEXT("%s погибает. Вся добыча похода потеряна."), *GM->GetHamsterName()),
+			EventHudBadColor, EventHudChoiceScale * S, Width);
+	}
+	const FString Continuation = bDead ? FString() : Event->ContinuationText.ToString();
 	if (!Continuation.IsEmpty())
 	{
 		Lines.Add({ FString(), EventHudTextColor, EventHudBodyScale * S });

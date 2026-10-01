@@ -1,4 +1,4 @@
-// Owns the current run. Lives on the GameInstance, so it survives map changes (run map <-> rooms).
+﻿// Owns the current run. Lives on the GameInstance, so it survives map changes (run map <-> rooms).
 
 #pragma once
 
@@ -11,6 +11,8 @@ class UCREventDefinition;
 struct FCREventChoice;
 
 DECLARE_MULTICAST_DELEGATE(FCROnRunStateChanged);
+/** Fired exactly once when a run ends (Completed, Failed or Abandoned), with the run as it ended. */
+DECLARE_MULTICAST_DELEGATE_OneParam(FCROnRunEnded, const FCRRunState& /*EndedRun*/);
 
 UCLASS()
 class CARDSROGUELIKE_API UCRRunSubsystem : public UGameInstanceSubsystem
@@ -24,7 +26,14 @@ public:
 	/** Development/repro API: a fresh run whose graph is generated from Seed (same seed = same map). */
 	void StartFreshRunWithSeed(int32 Seed);
 
+	/** Starts a new run for a profile (from the hub): random seed, the selected hamster and the hub bonuses. */
+	void StartProfileRun(const FCRRunStartConfig& Config);
+
+	/** Clears the run. A run still in progress is reported as Abandoned first. */
 	void AbandonRun();
+
+	/** True if the run was started from a profile (its end is delivered to that profile). */
+	bool IsProfileRun() const { return !RunState.ProfileId.IsEmpty(); }
 
 	ECRRunStatus GetStatus() const { return RunState.Status; }
 	bool IsRunActive() const { return RunState.Status == ECRRunStatus::Active; }
@@ -75,7 +84,10 @@ public:
 	 */
 	bool CommitEventChoice(FName EventNodeId, const UCREventDefinition* Event, int32 ChoiceIndex, int32 SacrificeDeckIndex);
 
-	/** Completes the current event room after its result was shown. Only valid once a choice is committed. */
+	/**
+	 * Completes the current event room after its result was shown. Only valid once a choice is committed and
+	 * the hamster survived it (a lethal choice already failed the run inside CommitEventChoice).
+	 */
 	bool ContinueFromEvent(FName EventNodeId);
 
 	/** Only Available nodes can be entered; there is no backtracking. */
@@ -90,8 +102,11 @@ public:
 	/** Resolves the current room: it becomes Completed and its outgoing rooms Available. */
 	bool CompleteCurrentRoom();
 
-	/** Ends the run as failed. The state is kept for inspection; nothing restarts automatically. */
-	void FailCurrentRun();
+	/** Ends the run as failed (the hamster died of Cause). The state is kept for inspection; nothing restarts automatically. */
+	void FailCurrentRun(ECRHamsterDeathCause Cause = ECRHamsterDeathCause::Combat);
+
+	/** True once the run failed (the hamster is dead). */
+	bool IsRunFailed() const { return RunState.Status == ECRRunStatus::Failed; }
 
 	void SetHamsterHP(int32 CurrentHP);
 
@@ -104,23 +119,25 @@ public:
 	/** Broadcast whenever the run state changes. */
 	FCROnRunStateChanged OnRunStateChanged;
 
+	FCROnRunEnded OnRunEnded;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	/** Automation tests only: direct access to set up a room situation without playing to it. */
+	FCRRunState& GetMutableRunStateForTests() { return RunState; }
+#endif
+
 private:
 	/** Picks the seed for a normal new run (outside the graph stream). */
 	static int32 MakeRandomRunSeed();
+	void StartRun(int32 Seed, const FCRRunStartConfig& Config);
 	void RefreshNodeStates();
+	void ReportRunEnd(ECRRunEndReason Reason);
 
 	/** Mutable state of a shop the hamster is currently standing in (unresolved), or nullptr. */
 	FCRShopState* GetActiveShopState(FName ShopNodeId);
 
 	/** Mutable state of the event the hamster is currently standing in (unresolved, initialized), or nullptr. */
 	FCREventNodeState* GetActiveEventState(FName EventNodeId);
-
-	/**
-	 * TEMPORARY safety guard until the event-death (Graveyard) milestone: event choices that would bring
-	 * HP to 0 or below are disabled, because a lethal event result has no resolution flow yet. The data
-	 * model allows lethal effects; replace this guard with the death flow, do not turn it into a clamp.
-	 */
-	static bool WouldEventChoiceBeLethal(int32 CurrentHP, int32 HPDelta);
 
 	/** Read-only in the editor/MCP for debugging during PIE. */
 	UPROPERTY(VisibleInstanceOnly, Category = "CR|Run")

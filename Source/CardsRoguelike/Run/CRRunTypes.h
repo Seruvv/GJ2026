@@ -20,6 +20,28 @@ enum class ECRRoomType : uint8
 	Return
 };
 
+UENUM(BlueprintType)
+enum class ECRRunEndReason : uint8
+{
+	/** The hamster reached the Return. */
+	Completed,
+	/** The hamster died. */
+	Failed,
+	/** The player left the run early. */
+	Abandoned
+};
+
+/** What killed the hamster of a failed run. Coarse on purpose; detailed killer attribution can extend it later. */
+UENUM(BlueprintType)
+enum class ECRHamsterDeathCause : uint8
+{
+	None,
+	/** Died in a combat room. */
+	Combat,
+	/** Died from an event choice. */
+	Event
+};
+
 /** Distinguishes "no run yet" from "a run that ended", so a failed run is not silently replaced. */
 UENUM(BlueprintType)
 enum class ECRRunStatus : uint8
@@ -37,6 +59,58 @@ enum class ECRRunNodeState : uint8
 	Available,
 	Current,
 	Completed
+};
+
+/** Bonuses applied when a run starts (the hub computes them from the profile's building levels). */
+USTRUCT(BlueprintType)
+struct FCRRunStartBonuses
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 BonusMaxHP = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> ExtraCardIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 StartSilver = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 StartFood = 0;
+};
+
+/**
+ * Everything a new run is started from: who goes (a snapshot of the hamster's base stats and deck) and the
+ * hub bonuses on top. The run copies it into its own state, so it never depends on the hub staying loaded.
+ */
+USTRUCT(BlueprintType)
+struct FCRRunStartConfig
+{
+	GENERATED_BODY()
+
+	/** Profile the run belongs to (empty = developer run). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString ProfileId;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FName HamsterId;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString HamsterName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 BaseMaxHP = 30;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	int32 BaseManaPerTurn = 3;
+
+	/** The hamster's own starting deck; empty = the shared starter deck. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	TArray<FName> StartingDeckCardIds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FCRRunStartBonuses Bonuses;
 };
 
 /** One room on the run map. Connections are directed: they list the legal next rooms. */
@@ -74,6 +148,10 @@ USTRUCT(BlueprintType)
 struct FCRHamsterRunData
 {
 	GENERATED_BODY()
+
+	/** Persistent hamster this run was started with (None for developer runs). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
+	FName HamsterId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Run")
 	FString Name;
@@ -222,6 +300,26 @@ struct FCRRunState
 	/** Event state per event node id; independent for every event room of the run. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
 	TMap<FName, FCREventNodeState> EventStates;
+
+	/** Profile this run was started from (empty for developer runs opened straight on the run map). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString ProfileId;
+
+	/** Set once the run's end was reported (OnRunEnded fires exactly once per run). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	bool bEndReported = false;
+
+	/** Why the run ended (valid once bEndReported). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	ECRRunEndReason EndReason = ECRRunEndReason::Completed;
+
+	/** Unique per started run; the profile uses it to apply a run's end exactly once. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	FString RunId;
+
+	/** What killed the hamster (Failed runs only). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Run")
+	ECRHamsterDeathCause DeathCause = ECRHamsterDeathCause::None;
 };
 
 namespace CRRun
@@ -231,6 +329,22 @@ namespace CRRun
 	/** Player-facing (Russian) room type name for the run map UI. */
 	FString RoomTypeDisplayName(ECRRoomType Type);
 	FLinearColor RoomTypeColor(ECRRoomType Type);
+	/** Player-facing (Russian) death line: "Погиб в бою" / "Погиб во время события". */
+	FString DeathCauseDisplayText(ECRHamsterDeathCause Cause);
+
+	/** Hamster and deck every run starts from (before hub bonuses). */
+	constexpr int32 BaseHamsterMaxHP = 30;
+	constexpr int32 BaseHamsterManaPerTurn = 3;
+
+	/** Start config of a developer run (no profile): the prototype test hamster. */
+	FCRRunStartConfig MakeDeveloperStartConfig();
+
+	/**
+	 * Fills a fresh run's hamster, deck and carried loot from a start config: effective max HP = base + hub bonus,
+	 * mana = base mana, deck = the hamster's deck (or the starter deck) + bonus cards. The hamster starts at full HP.
+	 */
+	void ApplyStartConfig(struct FCRRunState& RunState, const FCRRunStartConfig& Config);
+	inline TArray<FName> StarterDeck() { return { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") }; }
 
 	/** Prototype maps used by the run loop. */
 	inline const TCHAR* RunMapPath() { return TEXT("/Game/Dev/TestMaps/LV_RunMapSandbox"); }

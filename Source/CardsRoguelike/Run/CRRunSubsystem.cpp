@@ -51,17 +51,25 @@ void UCRRunSubsystem::StartFreshRun()
 
 void UCRRunSubsystem::StartFreshRunWithSeed(int32 Seed)
 {
+	StartRun(Seed, CRRun::MakeDeveloperStartConfig());
+}
+
+void UCRRunSubsystem::StartProfileRun(const FCRRunStartConfig& Config)
+{
+	StartRun(MakeRandomRunSeed(), Config);
+}
+
+void UCRRunSubsystem::StartRun(int32 Seed, const FCRRunStartConfig& Config)
+{
 	// A fresh run replaces everything: node progress, shop and event states, hamster, deck, resources.
 	RunState = FCRRunState();
 	RunState.Status = ECRRunStatus::Active;
 	RunState.RunSeed = Seed;
-
-	RunState.Hamster.Name = TEXT("Test Hamster");
-	RunState.Hamster.MaxHP = 30;
-	RunState.Hamster.CurrentHP = 30;
-	RunState.Hamster.ManaPerTurn = 3;
-
-	RunState.DeckCardIds = { TEXT("Push"), TEXT("Blast"), TEXT("Pull"), TEXT("Guard"), TEXT("Mend") };
+	RunState.RunId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	CRRun::ApplyStartConfig(RunState, Config);
+	UE_LOG(LogCRRun, Log, TEXT("Run hamster: %s (%s), max HP %d, mana %d, deck %d cards (+%d), start Silver %d, Food %d, profile %s"),
+		*Config.HamsterId.ToString(), *RunState.Hamster.Name, RunState.Hamster.MaxHP, RunState.Hamster.ManaPerTurn, RunState.DeckCardIds.Num(),
+		Config.Bonuses.ExtraCardIds.Num(), RunState.Carried.Silver, RunState.Carried.Food, Config.ProfileId.IsEmpty() ? TEXT("none") : *Config.ProfileId);
 
 	// The graph is generated exactly once per run; room maps and returns only read it.
 	const FCRRunGenerationResult Generated = CRRunGen::Generate(Seed);
@@ -96,6 +104,11 @@ void UCRRunSubsystem::StartFreshRunWithSeed(int32 Seed)
 
 void UCRRunSubsystem::AbandonRun()
 {
+	// Leaving a run that is still in progress ends it; a finished run was already reported.
+	if (IsRunActive())
+	{
+		ReportRunEnd(ECRRunEndReason::Abandoned);
+	}
 	RunState = FCRRunState();
 	UE_LOG(LogCRRun, Log, TEXT("Run abandoned"));
 	OnRunStateChanged.Broadcast();
@@ -341,11 +354,6 @@ FCREventNodeState* UCRRunSubsystem::GetActiveEventState(FName EventNodeId)
 	return State && State->bInitialized ? State : nullptr;
 }
 
-bool UCRRunSubsystem::WouldEventChoiceBeLethal(int32 CurrentHP, int32 HPDelta)
-{
-	return HPDelta < 0 && CurrentHP + HPDelta <= 0;
-}
-
 bool UCRRunSubsystem::ChoiceNeedsCardSelection(const FCREventChoice& Choice)
 {
 	return Choice.Effects.ContainsByPredicate([](const FCREventEffect& Effect) { return Effect.Type == ECREventEffectType::RemoveSelectedCard; });
@@ -355,7 +363,7 @@ FString UCRRunSubsystem::GetEventChoiceBlockReason(const FCREventChoice& Choice)
 {
 	// Validate the whole choice up front so it either commits completely or not at all.
 	// Reasons are shown to the player on the disabled choice, so they are in Russian.
-	int32 HPDelta = 0;
+	// HP loss is never a block reason: a narrative choice may kill the hamster (see CommitEventChoice).
 	int32 ResourceDelta[3] = { 0, 0, 0 };
 	int32 Sacrifices = 0;
 	for (const FCREventEffect& Effect : Choice.Effects)
@@ -363,7 +371,6 @@ FString UCRRunSubsystem::GetEventChoiceBlockReason(const FCREventChoice& Choice)
 		switch (Effect.Type)
 		{
 		case ECREventEffectType::ModifyHP:
-			HPDelta += Effect.Amount;
 			break;
 		case ECREventEffectType::ModifyResource:
 			ResourceDelta[static_cast<int32>(Effect.Resource)] += Effect.Amount;
@@ -402,10 +409,6 @@ FString UCRRunSubsystem::GetEventChoiceBlockReason(const FCREventChoice& Choice)
 	if (Sacrifices == 1 && RunState.DeckCardIds.Num() == 0)
 	{
 		return TEXT("Нет карты, которой можно пожертвовать");
-	}
-	if (WouldEventChoiceBeLethal(RunState.Hamster.CurrentHP, HPDelta))
-	{
-		return TEXT("Этот выбор окажется смертельным");
 	}
 	return FString();
 }
@@ -447,8 +450,7 @@ bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinit
 		{
 		case ECREventEffectType::ModifyHP:
 		{
-			// Healing caps at MaxHP. Damage is not clamped to 1: lethal outcomes are blocked by the
-			// temporary guard in validation instead (see WouldEventChoiceBeLethal).
+			// Healing caps at MaxHP. Damage is not clamped: HP can reach 0, which kills the hamster below.
 			const int32 Before = Hamster.CurrentHP;
 			Hamster.CurrentHP = FMath::Max(0, FMath::Min(Hamster.MaxHP, Hamster.CurrentHP + Effect.Amount));
 			Lines.Add(FString::Printf(TEXT("Здоровье %s"), *CREvent::SignedAmount(Hamster.CurrentHP - Before)));
@@ -487,12 +489,21 @@ bool UCRRunSubsystem::CommitEventChoice(FName EventNodeId, const UCREventDefinit
 	UE_LOG(LogCRRun, Log, TEXT("Event %s (%s): choice %d committed [%s] -> HP %d/%d, Silver %d, Food %d, Wood %d, deck %d"),
 		*EventNodeId.ToString(), *Event->EventId.ToString(), ChoiceIndex + 1, *FString::Join(LogParts, TEXT("; ")),
 		Hamster.CurrentHP, Hamster.MaxHP, Carried.Silver, Carried.Food, Carried.Wood, RunState.DeckCardIds.Num());
+
+	// A lethal choice ends the run right here, inside the one commit: the result screen still shows the
+	// narrative consequence, but the room can never be continued, so no further route progression exists.
+	if (Hamster.CurrentHP <= 0)
+	{
+		UE_LOG(LogCRRun, Log, TEXT("Event %s: the hamster died from choice %d"), *EventNodeId.ToString(), ChoiceIndex + 1);
+		FailCurrentRun(ECRHamsterDeathCause::Event);
+	}
 	OnRunStateChanged.Broadcast();
 	return true;
 }
 
 bool UCRRunSubsystem::ContinueFromEvent(FName EventNodeId)
 {
+	// GetActiveEventState requires an active run, so a lethal (failed) event cannot be continued.
 	const FCREventNodeState* State = GetActiveEventState(EventNodeId);
 	if (!State || !State->bEffectsCommitted)
 	{
@@ -509,13 +520,39 @@ bool UCRRunSubsystem::CompleteCurrentRoom()
 	}
 
 	RunState.bCurrentRoomResolved = true;
+	// Reaching the Return completes the run (the route has no further rooms).
+	const FCRRunNodeData* Current = GetCurrentNode();
+	const bool bReachedReturn = Current && Current->RoomType == ECRRoomType::Return;
+	if (bReachedReturn)
+	{
+		RunState.Status = ECRRunStatus::Completed;
+	}
 	RefreshNodeStates();
 	UE_LOG(LogCRRun, Log, TEXT("Room %s resolved (HP %d/%d)"), *RunState.CurrentNodeId.ToString(), RunState.Hamster.CurrentHP, RunState.Hamster.MaxHP);
+	if (bReachedReturn)
+	{
+		UE_LOG(LogCRRun, Log, TEXT("Run completed: reached the Return"));
+		ReportRunEnd(ECRRunEndReason::Completed);
+	}
 	OnRunStateChanged.Broadcast();
 	return true;
 }
 
-void UCRRunSubsystem::FailCurrentRun()
+void UCRRunSubsystem::ReportRunEnd(ECRRunEndReason Reason)
+{
+	if (RunState.bEndReported)
+	{
+		return;
+	}
+	RunState.bEndReported = true;
+	RunState.EndReason = Reason;
+	UE_LOG(LogCRRun, Log, TEXT("Run end reported: %s (carried Silver %d, Food %d, Wood %d, profile %s)"),
+		*UEnum::GetValueAsString(Reason), RunState.Carried.Silver, RunState.Carried.Food, RunState.Carried.Wood,
+		RunState.ProfileId.IsEmpty() ? TEXT("none") : *RunState.ProfileId);
+	OnRunEnded.Broadcast(RunState);
+}
+
+void UCRRunSubsystem::FailCurrentRun(ECRHamsterDeathCause Cause)
 {
 	if (!IsRunActive())
 	{
@@ -523,8 +560,10 @@ void UCRRunSubsystem::FailCurrentRun()
 	}
 
 	RunState.Status = ECRRunStatus::Failed;
+	RunState.DeathCause = Cause;
 	RefreshNodeStates();
-	UE_LOG(LogCRRun, Log, TEXT("Run failed in room %s"), *RunState.CurrentNodeId.ToString());
+	UE_LOG(LogCRRun, Log, TEXT("Run failed in room %s (%s)"), *RunState.CurrentNodeId.ToString(), *UEnum::GetValueAsString(Cause));
+	ReportRunEnd(ECRRunEndReason::Failed);
 	OnRunStateChanged.Broadcast();
 }
 
